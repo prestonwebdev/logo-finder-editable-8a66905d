@@ -20,7 +20,7 @@ const ResultsPage: React.FC = () => {
   const [companyData, setCompanyData] = useState<CompanyData>({
     logo: '/placeholder.svg',
     industry: 'Technology',
-    brandColor: '#00D5AC'
+    brandColor: '#008F5D'
   });
 
   useEffect(() => {
@@ -34,6 +34,8 @@ const ResultsPage: React.FC = () => {
       try {
         // Extract website data
         const data = await extractFromWebsite(url);
+        // Override the brand color with our specified color
+        data.brandColor = '#008F5D';
         setCompanyData(data);
       } catch (error) {
         console.error('Error extracting data:', error);
@@ -102,13 +104,13 @@ const ResultsPage: React.FC = () => {
         </h2>
         
         <div className="space-y-12 max-w-md mx-auto">
-          {/* Logo Section */}
+          {/* Logo Section - Made Bigger, Removed Background */}
           <div className="flex justify-between items-center">
             <span className="text-lg">Company Logo</span>
             <div className="flex items-center space-x-4">
               <motion.div
                 whileHover={{ scale: 1.05 }}
-                className="w-40 h-16 bg-white rounded-md flex items-center justify-center overflow-hidden"
+                className="w-48 h-24 flex items-center justify-center overflow-hidden"
               >
                 <img 
                   src={companyData.logo} 
