@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Upload, Edit2 } from 'lucide-react';
+import { Upload, Edit2, RefreshCw } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { extractFromWebsite } from '@/utils/websiteParser';
 
@@ -16,37 +16,48 @@ interface CompanyData {
 const ResultsPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingIndustry, setEditingIndustry] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
   const [companyData, setCompanyData] = useState<CompanyData>({
     logo: '/placeholder.svg',
     industry: 'Technology',
     brandColor: '#008F5D'
   });
 
+  const fetchWebsiteData = async (websiteUrl: string) => {
+    setIsLoading(true);
+    try {
+      // Extract website data
+      const data = await extractFromWebsite(websiteUrl);
+      setCompanyData(data);
+      toast.success('Website data extracted successfully');
+    } catch (error) {
+      console.error('Error extracting data:', error);
+      toast.error('Failed to extract website data');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    const url = sessionStorage.getItem('websiteUrl');
-    if (!url) {
+    const websiteUrl = sessionStorage.getItem('websiteUrl');
+    if (!websiteUrl) {
       navigate('/');
       return;
     }
 
-    const fetchData = async () => {
-      try {
-        // Extract website data
-        const data = await extractFromWebsite(url);
-        // Override the brand color with our specified color
-        data.brandColor = '#008F5D';
-        setCompanyData(data);
-      } catch (error) {
-        console.error('Error extracting data:', error);
-        toast.error('Failed to extract all website data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
+    setUrl(websiteUrl);
+    fetchWebsiteData(websiteUrl);
   }, [navigate]);
+
+  const handleRefresh = () => {
+    if (!url || isRefreshing) return;
+    
+    setIsRefreshing(true);
+    fetchWebsiteData(url);
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,6 +100,36 @@ const ResultsPage: React.FC = () => {
     }, 1500);
   };
 
+  // Loading state while extracting website data
+  if (isLoading) {
+    return (
+      <div className="page-transition-container">
+        <Logo className="mb-24" />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center"
+        >
+          <div className="glass-panel rounded-2xl p-10 text-center">
+            <h2 className="text-3xl font-light mb-6">Analyzing website...</h2>
+            <div className="flex justify-center mb-4">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                className="w-12 h-12"
+              >
+                <RefreshCw className="w-12 h-12 text-primary" />
+              </motion.div>
+            </div>
+            <p className="text-lg text-white/70">
+              This might take a moment as we extract information from the website.
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-transition-container">
       <Logo className="mb-24" />
@@ -99,9 +140,21 @@ const ResultsPage: React.FC = () => {
         transition={{ duration: 0.6 }}
         className="glass-panel w-full max-w-2xl rounded-2xl p-10"
       >
-        <h2 className="text-3xl font-light text-center mb-12">
-          Here's what we found
-        </h2>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-3xl font-light">
+            Here's what we found
+          </h2>
+          <motion.button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full glass-panel ${isRefreshing ? 'opacity-50' : ''}`}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </motion.button>
+        </div>
         
         <div className="space-y-12 max-w-md mx-auto">
           {/* Logo Section - Made Bigger, Removed Background */}
@@ -110,13 +163,21 @@ const ResultsPage: React.FC = () => {
             <div className="flex items-center space-x-4">
               <motion.div
                 whileHover={{ scale: 1.05 }}
-                className="w-48 h-24 flex items-center justify-center overflow-hidden"
+                className="w-48 h-24 flex items-center justify-center overflow-hidden glass-panel p-2 rounded-md"
               >
-                <img 
-                  src={companyData.logo} 
-                  alt="Company Logo" 
-                  className="max-w-full max-h-full object-contain p-2" 
-                />
+                {companyData.logo ? (
+                  <img 
+                    src={companyData.logo} 
+                    alt="Company Logo" 
+                    className="max-w-full max-h-full object-contain" 
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = '/placeholder.svg';
+                    }}
+                  />
+                ) : (
+                  <div className="text-center text-white/50">No logo found</div>
+                )}
               </motion.div>
               <label className="cursor-pointer">
                 <input
