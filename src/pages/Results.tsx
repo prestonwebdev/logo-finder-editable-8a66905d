@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -28,7 +27,6 @@ const ResultsPage: React.FC = () => {
   const fetchWebsiteData = async (websiteUrl: string) => {
     setIsLoading(true);
     try {
-      // Extract website data
       const data = await extractFromWebsite(websiteUrl);
       setCompanyData(data);
       toast.success('Website data extracted successfully');
@@ -91,16 +89,13 @@ const ResultsPage: React.FC = () => {
   };
 
   const saveAndContinue = () => {
-    // Here you would save the data and proceed to the next step
     toast.success('Company details saved successfully');
-    // For demo purposes, just return to the first page
     setTimeout(() => {
       sessionStorage.removeItem('websiteUrl');
       navigate('/');
     }, 1500);
   };
 
-  // Loading state while extracting website data
   if (isLoading) {
     return (
       <div className="page-transition-container">
@@ -157,7 +152,6 @@ const ResultsPage: React.FC = () => {
         </div>
         
         <div className="space-y-12 max-w-md mx-auto">
-          {/* Logo Section - Made Bigger, Removed Background */}
           <div className="flex justify-between items-center">
             <span className="text-lg">Company Logo</span>
             <div className="flex items-center space-x-4">
@@ -173,6 +167,7 @@ const ResultsPage: React.FC = () => {
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = '/placeholder.svg';
+                      toast.error("Couldn't load logo, using placeholder instead");
                     }}
                   />
                 ) : (
@@ -197,7 +192,6 @@ const ResultsPage: React.FC = () => {
             </div>
           </div>
           
-          {/* Industry Section */}
           <div className="flex justify-between items-center">
             <span className="text-lg">Industry</span>
             <div className="flex items-center space-x-4">
@@ -231,7 +225,6 @@ const ResultsPage: React.FC = () => {
             </div>
           </div>
           
-          {/* Brand Color Section */}
           <div className="flex justify-between items-center">
             <span className="text-lg">Brand Color</span>
             <div className="flex items-center space-x-4">

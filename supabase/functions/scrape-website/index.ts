@@ -24,6 +24,69 @@ function extractDomain(url: string): string {
   }
 }
 
+// Advanced logo extraction function with multiple fallback strategies
+async function extractLogo(html: string, baseUrl: string): Promise<string> {
+  // Strategy 1: Try to find structured data (JSON-LD)
+  const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (jsonLdMatch && jsonLdMatch[1]) {
+    try {
+      const jsonData = JSON.parse(jsonLdMatch[1]);
+      // Look for logo in various JSON-LD formats
+      const logo = jsonData.logo || 
+                  (jsonData.organization && jsonData.organization.logo) || 
+                  (jsonData.publisher && jsonData.publisher.logo);
+      
+      if (logo && typeof logo === 'string') {
+        return makeUrlAbsolute(logo, baseUrl);
+      }
+    } catch (e) {
+      console.log('JSON-LD parsing error:', e);
+    }
+  }
+  
+  // Strategy 2: Look for Apple touch icons (usually high quality)
+  const appleTouchIconMatch = html.match(/<link[^>]*rel=["']apple-touch-icon(-precomposed)?["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+  if (appleTouchIconMatch && appleTouchIconMatch[2]) {
+    return makeUrlAbsolute(appleTouchIconMatch[2], baseUrl);
+  }
+  
+  // Strategy 3: Look for favicon with .ico, .png or other extensions
+  const faviconMatch = html.match(/<link[^>]*rel=["'](icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+  if (faviconMatch && faviconMatch[2]) {
+    return makeUrlAbsolute(faviconMatch[2], baseUrl);
+  }
+  
+  // Strategy 4: Look for Open Graph image
+  const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+  if (ogImageMatch && ogImageMatch[1]) {
+    return makeUrlAbsolute(ogImageMatch[1], baseUrl);
+  }
+  
+  // Strategy 5: Look for Twitter image
+  const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+  if (twitterImageMatch && twitterImageMatch[1]) {
+    return makeUrlAbsolute(twitterImageMatch[1], baseUrl);
+  }
+  
+  // Strategy 6: Check for a default /favicon.ico which many sites have
+  return `${baseUrl}/favicon.ico`;
+}
+
+// Make relative URLs absolute
+function makeUrlAbsolute(url: string, baseUrl: string): string {
+  try {
+    if (url.startsWith('data:')) {
+      return url; // Already a data URL
+    }
+    
+    const urlObj = new URL(url, baseUrl);
+    return urlObj.href;
+  } catch (e) {
+    console.error('Error making URL absolute:', e);
+    return url;
+  }
+}
+
 // Main function to scrape website and extract data
 async function scrapeWebsite(url: string) {
   console.log(`Scraping website: ${url}`);
@@ -52,6 +115,9 @@ async function scrapeWebsite(url: string) {
       fullUrl = `https://${url}`;
     }
     
+    // Get base URL for resolving relative URLs
+    const baseUrl = new URL(fullUrl).origin;
+    
     // Fetch the website HTML
     console.log(`Fetching URL: ${fullUrl}`);
     const response = await fetch(fullUrl, {
@@ -66,45 +132,8 @@ async function scrapeWebsite(url: string) {
     
     const html = await response.text();
     
-    // Extract logo URL (look for common logo patterns in meta tags and links)
-    let logoUrl = '';
-    
-    // Try apple-touch-icon first
-    const appleIconMatch = html.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-    if (appleIconMatch && appleIconMatch[1]) {
-      logoUrl = appleIconMatch[1];
-    }
-    
-    // If no apple icon, try icon or shortcut icon
-    if (!logoUrl) {
-      const iconMatch = html.match(/<link[^>]*rel=["'](icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-      if (iconMatch && iconMatch[2]) {
-        logoUrl = iconMatch[2];
-      }
-    }
-    
-    // If still no logo, try Open Graph image
-    if (!logoUrl) {
-      const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
-      if (ogImageMatch && ogImageMatch[1]) {
-        logoUrl = ogImageMatch[1];
-      }
-    }
-    
-    // Make logo URL absolute if it's relative
-    if (logoUrl && !logoUrl.startsWith('http')) {
-      const baseUrl = new URL(fullUrl);
-      if (logoUrl.startsWith('/')) {
-        logoUrl = `${baseUrl.protocol}//${baseUrl.host}${logoUrl}`;
-      } else {
-        logoUrl = `${baseUrl.protocol}//${baseUrl.host}/${logoUrl}`;
-      }
-    }
-    
-    // If we couldn't find a logo, use a default
-    if (!logoUrl) {
-      logoUrl = '/placeholder.svg';
-    }
+    // Extract logo URL using enhanced strategy
+    const logoUrl = await extractLogo(html, baseUrl);
     
     // Extract theme color (used by many mobile browsers)
     let brandColor = '';
@@ -112,8 +141,14 @@ async function scrapeWebsite(url: string) {
     if (themeColorMatch && themeColorMatch[1]) {
       brandColor = themeColorMatch[1];
     } else {
-      // Default brand color if none found
-      brandColor = '#008F5D';
+      // Try msapplication-TileColor as fallback
+      const tileColorMatch = html.match(/<meta[^>]*name=["']msapplication-TileColor["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+      if (tileColorMatch && tileColorMatch[1]) {
+        brandColor = tileColorMatch[1];
+      } else {
+        // Default brand color if none found
+        brandColor = '#008F5D';
+      }
     }
     
     // Attempt to determine industry (this is harder and less reliable)
@@ -121,14 +156,21 @@ async function scrapeWebsite(url: string) {
     let industry = 'Technology'; // Default
     
     const industryKeywords = {
-      'finance|banking|investment|insurance|capital|wealth': 'Finance',
-      'health|healthcare|medical|wellness|fitness|doctor|hospital': 'Healthcare',
-      'retail|shop|store|buy|purchase|ecommerce|e-commerce': 'Retail',
-      'travel|hotel|booking|flight|vacation|tourism': 'Travel',
-      'food|restaurant|dining|cuisine|meal|recipe': 'Food & Dining',
-      'education|learning|course|university|school|college|academy': 'Education',
-      'media|news|entertainment|film|movie|music|game': 'Media & Entertainment',
-      'real estate|property|home|apartment|housing': 'Real Estate',
+      'finance|banking|investment|insurance|capital|wealth|money|payment|credit|loan': 'Finance',
+      'health|healthcare|medical|wellness|fitness|doctor|hospital|clinic|patient|pharmacy': 'Healthcare',
+      'retail|shop|store|buy|purchase|ecommerce|e-commerce|product|shopping': 'Retail',
+      'travel|hotel|booking|flight|vacation|tourism|trip|holiday|destination': 'Travel',
+      'food|restaurant|dining|cuisine|meal|recipe|menu|cook|chef|eat': 'Food & Dining',
+      'education|learning|course|university|school|college|academy|student|teach|class': 'Education',
+      'media|news|entertainment|film|movie|music|game|stream|video|podcast': 'Media & Entertainment',
+      'real estate|property|home|apartment|housing|rent|mortgage|house|building': 'Real Estate',
+      'marketing|advertising|agency|brand|campaign|design|creative|studio': 'Marketing & Creative',
+      'legal|law|attorney|lawyer|firm|counsel|litigation|court': 'Legal Services',
+      'consulting|business service|professional service|solution|strategy': 'Business Services',
+      'technology|software|app|digital|tech|data|cloud|IT|computer|internet': 'Technology',
+      'manufacturing|industrial|factory|production|engineering|machine': 'Manufacturing',
+      'nonprofit|charity|foundation|community|donate|volunteer': 'Nonprofit',
+      'government|public|official|administration|policy': 'Government'
     };
     
     for (const [keywords, industryName] of Object.entries(industryKeywords)) {
