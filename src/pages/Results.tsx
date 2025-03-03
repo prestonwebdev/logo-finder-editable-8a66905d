@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -29,7 +28,6 @@ const ResultsPage: React.FC = () => {
       const data = await extractFromWebsite(websiteUrl);
       console.log('Received website data:', data);
       
-      // Ensure we use the brand color from the website
       setCompanyData({
         logo: data.logo,
         brandColor: data.brandColor
@@ -159,7 +157,7 @@ const ResultsPage: React.FC = () => {
                 className="w-48 h-24 flex items-center justify-center overflow-hidden glass-panel p-2 rounded-md"
                 style={{ backgroundColor: companyData.brandColor ? `${companyData.brandColor}22` : 'transparent' }}
               >
-                {companyData.logo ? (
+                {companyData.logo && companyData.logo !== '/placeholder.svg' ? (
                   <img 
                     src={companyData.logo} 
                     alt="Company Logo" 
@@ -167,12 +165,10 @@ const ResultsPage: React.FC = () => {
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.style.display = 'none';
-                      e.currentTarget.parentElement!.innerHTML = '<span class="text-white/80 text-sm font-medium">No Logo Found</span>';
-                      toast.error("Couldn't load logo");
                     }}
                   />
                 ) : (
-                  <div className="text-center text-white/80 text-sm font-medium">No Logo Found</div>
+                  <div className="w-full h-full"></div>
                 )}
               </motion.div>
               <label className="cursor-pointer">

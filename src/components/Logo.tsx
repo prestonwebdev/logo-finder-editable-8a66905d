@@ -38,21 +38,14 @@ const Logo: React.FC<LogoProps> = ({
           className="max-w-full max-h-full object-contain"
           onError={(e) => {
             e.currentTarget.onerror = null;
-            // Instead of showing a placeholder image, hide the image and show text
             e.currentTarget.style.display = 'none';
-            // Adding a text node as a sibling element doesn't work well
-            // So we'll change the parent div content
-            const parentDiv = e.currentTarget.parentElement;
-            if (parentDiv) {
-              parentDiv.innerHTML = '<span class="text-xs font-medium text-center">No Logo Found</span>';
-            }
           }}
         />
       </motion.div>
     );
   }
   
-  // Show "No Logo Found" text when companyLogo is the placeholder
+  // Show an empty container when companyLogo is the placeholder
   if (companyLogo === '/placeholder.svg') {
     const sizeClasses = {
       sm: "w-8 h-8",
@@ -66,10 +59,8 @@ const Logo: React.FC<LogoProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
         className={cn("flex items-center justify-center overflow-hidden rounded-md", sizeClasses[size], className)}
-        style={{ backgroundColor: companyColor ? `${companyColor}22` : 'transparent' }}
-      >
-        <span className="text-xs font-medium text-center">No Logo Found</span>
-      </motion.div>
+        style={{ backgroundColor: 'transparent' }}
+      />
     );
   }
 
