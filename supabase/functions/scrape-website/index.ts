@@ -115,11 +115,95 @@ async function validateFaviconUrl(url: string): Promise<boolean> {
   }
 }
 
+// Function to extract images with specific class names or alt text that might be logos
+function extractLogoByClassOrAlt(html: string): string[] {
+  const potentialLogoImages: string[] = [];
+  
+  // Look for images with class names suggesting they are logos
+  const logoClassRegex = /<img[^>]*class=["'][^"']*(?:logo|brand|site-logo)[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = logoClassRegex.exec(html)) !== null) {
+    if (match[1]) {
+      potentialLogoImages.push(match[1]);
+    }
+  }
+  
+  // Look for images with alt text suggesting they are logos
+  const logoAltRegex = /<img[^>]*alt=["'][^"']*(?:logo|brand)[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = logoAltRegex.exec(html)) !== null) {
+    if (match[1]) {
+      potentialLogoImages.push(match[1]);
+    }
+  }
+  
+  return potentialLogoImages;
+}
+
+// Function to try logo retrieval from third-party services
+async function tryThirdPartyLogoServices(domain: string): Promise<string | null> {
+  try {
+    // Try Clearbit Logo API (doesn't require API key)
+    const clearbitUrl = `https://logo.clearbit.com/${domain}`;
+    try {
+      const response = await fetch(clearbitUrl, { method: 'HEAD' });
+      if (response.ok) {
+        console.log(`Found logo via Clearbit: ${clearbitUrl}`);
+        return clearbitUrl;
+      }
+    } catch (err) {
+      console.log('Clearbit API failed, trying other sources...');
+    }
+    
+    // Try Google's favicon service (doesn't require API key)
+    const googleFaviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    try {
+      const response = await fetch(googleFaviconUrl, { method: 'HEAD' });
+      if (response.ok) {
+        console.log(`Found logo via Google Favicon: ${googleFaviconUrl}`);
+        return googleFaviconUrl;
+      }
+    } catch (err) {
+      console.log('Google favicon service failed, trying other sources...');
+    }
+    
+    // Try Favicon Kit API (doesn't require API key)
+    const faviconKitUrl = `https://api.faviconkit.com/${domain}/144`;
+    try {
+      const response = await fetch(faviconKitUrl, { method: 'HEAD' });
+      if (response.ok) {
+        console.log(`Found logo via FaviconKit: ${faviconKitUrl}`);
+        return faviconKitUrl;
+      }
+    } catch (err) {
+      console.log('FaviconKit API failed');
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching from third-party services:', error);
+    return null;
+  }
+}
+
 // Advanced logo extraction function with multiple fallback strategies
-async function extractLogo(html: string, baseUrl: string): Promise<string> {
+async function extractLogo(html: string, baseUrl: string, domain: string): Promise<string> {
   console.log('Extracting logo for', baseUrl);
   
-  // Strategy 1: Look for images in navigation elements (new primary strategy)
+  // Strategy 1: Try third-party logo services first
+  const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
+  if (thirdPartyLogo) {
+    console.log('Using logo from third-party service:', thirdPartyLogo);
+    return thirdPartyLogo;
+  }
+  
+  // Strategy 2: Look for images with logo-related class names or alt text
+  const logoByClassOrAlt = extractLogoByClassOrAlt(html);
+  if (logoByClassOrAlt.length > 0) {
+    console.log('Found logo by class or alt text:', logoByClassOrAlt[0]);
+    return makeUrlAbsolute(logoByClassOrAlt[0], baseUrl);
+  }
+  
+  // Strategy 3: Look for images in navigation elements
   const navImages = extractImagesFromNav(html);
   console.log('Found navigation images:', navImages.length);
   
@@ -135,7 +219,7 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     return makeUrlAbsolute(likelyLogoImages[0], baseUrl);
   }
   
-  // Strategy 2: Try to find structured data (JSON-LD)
+  // Strategy 4: Try to find structured data (JSON-LD)
   const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
   if (jsonLdMatch && jsonLdMatch[1]) {
     try {
@@ -154,7 +238,16 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     }
   }
   
-  // Strategy 3: Look for Apple touch icons (usually high quality)
+  // Strategy 5: Look for SVG logos directly in the HTML
+  const svgLogoRegex = /<svg[^>]*(?:class|id)=["'].*?(?:logo|brand).*?["'][^>]*>.*?<\/svg>/is;
+  const svgMatch = html.match(svgLogoRegex);
+  if (svgMatch && svgMatch[0]) {
+    console.log('Found inline SVG logo in HTML');
+    // Convert SVG to a data URL (simplified for now)
+    return `data:image/svg+xml,${encodeURIComponent(svgMatch[0])}`;
+  }
+  
+  // Strategy 6: Look for Apple touch icons (usually high quality)
   const appleTouchIconMatch = html.match(/<link[^>]*rel=["']apple-touch-icon(-precomposed)?["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (appleTouchIconMatch && appleTouchIconMatch[2]) {
     const iconUrl = makeUrlAbsolute(appleTouchIconMatch[2], baseUrl);
@@ -166,8 +259,7 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     }
   }
   
-  // Strategy 4: Look for favicon with various approaches
-  // First, check for link elements with rel="icon" or rel="shortcut icon"
+  // Strategy 7: Look for link elements with rel="icon" or rel="shortcut icon"
   const faviconMatch = html.match(/<link[^>]*rel=["'](icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (faviconMatch && faviconMatch[2]) {
     const iconUrl = makeUrlAbsolute(faviconMatch[2], baseUrl);
@@ -179,7 +271,7 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     }
   }
   
-  // Strategy 5: Try common favicon locations
+  // Strategy 8: Try common favicon locations
   const faviconLocations = [
     `${baseUrl}/favicon.ico`,
     `${baseUrl}/favicon.png`,
@@ -196,38 +288,36 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     }
   }
   
-  // Strategy 6: Look for Open Graph image
+  // Strategy 9: Look for Open Graph image
   const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (ogImageMatch && ogImageMatch[1]) {
     console.log('Found OG image:', ogImageMatch[1]);
     return makeUrlAbsolute(ogImageMatch[1], baseUrl);
   }
   
-  // Strategy 7: Look for Twitter image
+  // Strategy 10: Look for Twitter image
   const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (twitterImageMatch && twitterImageMatch[1]) {
     console.log('Found Twitter image:', twitterImageMatch[1]);
     return makeUrlAbsolute(twitterImageMatch[1], baseUrl);
   }
   
-  // Strategy 8: Any SVG in the page (might be logos)
-  const svgMatch = html.match(/<img[^>]*src=["']([^"']+\.svg)["'][^>]*>/i);
-  if (svgMatch && svgMatch[1]) {
-    console.log('Found SVG image:', svgMatch[1]);
-    return makeUrlAbsolute(svgMatch[1], baseUrl);
+  // Strategy 11: Any SVG in the page (might be logos)
+  const svgMatch2 = html.match(/<img[^>]*src=["']([^"']+\.svg)["'][^>]*>/i);
+  if (svgMatch2 && svgMatch2[1]) {
+    console.log('Found SVG image:', svgMatch2[1]);
+    return makeUrlAbsolute(svgMatch2[1], baseUrl);
   }
   
-  // Strategy 9: Check for any small PNG images that might be logos
+  // Strategy 12: Check for any small PNG images that might be logos
   const smallPngMatch = html.match(/<img[^>]*src=["']([^"']+\.png)["'][^>]*>/i);
   if (smallPngMatch && smallPngMatch[1]) {
     console.log('Found PNG image:', smallPngMatch[1]);
     return makeUrlAbsolute(smallPngMatch[1], baseUrl);
   }
   
-  // Strategy 10: Use default favicon.ico as last resort
-  const defaultFaviconUrl = `${baseUrl}/favicon.ico`;
-  console.log('Using default favicon.ico as fallback:', defaultFaviconUrl);
-  return defaultFaviconUrl;
+  // Default to Google's favicon service as last resort
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 }
 
 // Make relative URLs absolute
@@ -387,25 +477,88 @@ async function scrapeWebsite(url: string) {
         };
       }
       
+      // If the logo in existing data is a placeholder, try to get a better one
+      if (!existingData.logo || existingData.logo === '/placeholder.svg') {
+        // Try third-party logo services
+        const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
+        if (thirdPartyLogo) {
+          console.log(`Updating cached data with third-party logo for ${domain}`);
+          
+          // Update the record with the third-party logo
+          const { error: updateError } = await supabase
+            .from('website_data')
+            .update({ logo: thirdPartyLogo })
+            .eq('id', existingData.id);
+            
+          if (updateError) {
+            console.error('Error updating website data:', updateError);
+          } else {
+            console.log('Successfully updated website data with third-party logo');
+            return {
+              ...existingData,
+              logo: thirdPartyLogo
+            };
+          }
+        }
+      }
+      
       return existingData;
+    }
+    
+    // Try third-party logo services first before fetching the website
+    const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
+    if (thirdPartyLogo) {
+      console.log('Using logo from third-party service:', thirdPartyLogo);
+      
+      // Create result object
+      const result = {
+        url,
+        logo: thirdPartyLogo,
+        brand_color: knownBrandColors[domain] || '#0052CC',
+      };
+      
+      // Store in database for future use
+      const { error: insertError } = await supabase
+        .from('website_data')
+        .insert([result]);
+      
+      if (insertError) {
+        console.error('Error storing website data:', insertError);
+      } else {
+        console.log('Successfully stored website data from third-party service');
+      }
+      
+      return result;
     }
     
     // Fetch the website HTML
     console.log(`Fetching URL: ${fullUrl}`);
-    const response = await fetch(fullUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch website: ${response.status} ${response.statusText}`);
+    let html = '';
+    try {
+      const response = await fetch(fullUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch website: ${response.status} ${response.statusText}`);
+      }
+      
+      html = await response.text();
+    } catch (fetchError) {
+      console.error('Error fetching website HTML:', fetchError);
+      
+      // Use domain-specific logo as fallback or return default values
+      return {
+        url,
+        logo: domainSpecificLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+        brand_color: knownBrandColors[domain] || '#0052CC',
+      };
     }
     
-    const html = await response.text();
-    
     // Use domain-specific logo if available, otherwise extract logo URL using enhanced strategy
-    const logoUrl = domainSpecificLogo || await extractLogo(html, baseUrl);
+    const logoUrl = domainSpecificLogo || await extractLogo(html, baseUrl, domain);
     
     // Extract brand color with known colors for popular sites
     const brandColor = extractBrandColor(html, domain);
@@ -438,11 +591,14 @@ async function scrapeWebsite(url: string) {
     const domain = extractDomain(url);
     const domainSpecificLogo = getDomainSpecificLogo(domain);
     
+    // Try third-party logo services as a last resort
+    const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
+    
     // Return default values on error, but use domain-specific logo if available
     return {
       url,
-      logo: domainSpecificLogo || '/placeholder.svg',
-      brand_color: knownBrandColors[domain] || '#0052CC', // Using a more neutral blue as default
+      logo: domainSpecificLogo || thirdPartyLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+      brand_color: knownBrandColors[domain] || '#0052CC',
     };
   }
 }
