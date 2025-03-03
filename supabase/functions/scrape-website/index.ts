@@ -102,6 +102,18 @@ function extractImagesFromNav(html: string): string[] {
   return images;
 }
 
+// Check if a favicon URL exists and can be accessed
+async function validateFaviconUrl(url: string): Promise<boolean> {
+  try {
+    console.log(`Validating favicon URL: ${url}`);
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch (error) {
+    console.log(`Failed to validate favicon URL: ${url}`);
+    return false;
+  }
+}
+
 // Advanced logo extraction function with multiple fallback strategies
 async function extractLogo(html: string, baseUrl: string): Promise<string> {
   console.log('Extracting logo for', baseUrl);
@@ -144,48 +156,77 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
   // Strategy 3: Look for Apple touch icons (usually high quality)
   const appleTouchIconMatch = html.match(/<link[^>]*rel=["']apple-touch-icon(-precomposed)?["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (appleTouchIconMatch && appleTouchIconMatch[2]) {
-    console.log('Found Apple touch icon:', appleTouchIconMatch[2]);
-    return makeUrlAbsolute(appleTouchIconMatch[2], baseUrl);
+    const iconUrl = makeUrlAbsolute(appleTouchIconMatch[2], baseUrl);
+    console.log('Found Apple touch icon:', iconUrl);
+    
+    // Validate that the icon URL is accessible
+    if (await validateFaviconUrl(iconUrl)) {
+      return iconUrl;
+    }
   }
   
-  // Strategy 4: Look for favicon with .ico, .png or other extensions
+  // Strategy 4: Look for favicon with various approaches
+  // First, check for link elements with rel="icon" or rel="shortcut icon"
   const faviconMatch = html.match(/<link[^>]*rel=["'](icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (faviconMatch && faviconMatch[2]) {
-    console.log('Found favicon:', faviconMatch[2]);
-    return makeUrlAbsolute(faviconMatch[2], baseUrl);
+    const iconUrl = makeUrlAbsolute(faviconMatch[2], baseUrl);
+    console.log('Found favicon in HTML:', iconUrl);
+    
+    // Validate that the icon URL is accessible
+    if (await validateFaviconUrl(iconUrl)) {
+      return iconUrl;
+    }
   }
   
-  // Strategy 5: Look for Open Graph image
+  // Strategy 5: Try common favicon locations
+  const faviconLocations = [
+    `${baseUrl}/favicon.ico`,
+    `${baseUrl}/favicon.png`,
+    `${baseUrl}/apple-touch-icon.png`,
+    `${baseUrl}/apple-icon.png`,
+    `${baseUrl}/icon.png`,
+    `${baseUrl}/site-icon.png`
+  ];
+  
+  for (const location of faviconLocations) {
+    if (await validateFaviconUrl(location)) {
+      console.log('Found favicon at common location:', location);
+      return location;
+    }
+  }
+  
+  // Strategy 6: Look for Open Graph image
   const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (ogImageMatch && ogImageMatch[1]) {
     console.log('Found OG image:', ogImageMatch[1]);
     return makeUrlAbsolute(ogImageMatch[1], baseUrl);
   }
   
-  // Strategy 6: Look for Twitter image
+  // Strategy 7: Look for Twitter image
   const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (twitterImageMatch && twitterImageMatch[1]) {
     console.log('Found Twitter image:', twitterImageMatch[1]);
     return makeUrlAbsolute(twitterImageMatch[1], baseUrl);
   }
   
-  // Strategy 7: Any SVG in the page (might be logos)
+  // Strategy 8: Any SVG in the page (might be logos)
   const svgMatch = html.match(/<img[^>]*src=["']([^"']+\.svg)["'][^>]*>/i);
   if (svgMatch && svgMatch[1]) {
     console.log('Found SVG image:', svgMatch[1]);
     return makeUrlAbsolute(svgMatch[1], baseUrl);
   }
   
-  // Strategy 8: Check for any small PNG images that might be logos
+  // Strategy 9: Check for any small PNG images that might be logos
   const smallPngMatch = html.match(/<img[^>]*src=["']([^"']+\.png)["'][^>]*>/i);
   if (smallPngMatch && smallPngMatch[1]) {
     console.log('Found PNG image:', smallPngMatch[1]);
     return makeUrlAbsolute(smallPngMatch[1], baseUrl);
   }
   
-  // Strategy 9: Check for a default /favicon.ico which many sites have
-  console.log('Using default favicon.ico as fallback');
-  return `${baseUrl}/favicon.ico`;
+  // Strategy 10: Use default favicon.ico as last resort
+  const defaultFaviconUrl = `${baseUrl}/favicon.ico`;
+  console.log('Using default favicon.ico as fallback:', defaultFaviconUrl);
+  return defaultFaviconUrl;
 }
 
 // Make relative URLs absolute
@@ -253,7 +294,8 @@ function extractBrandColor(html: string, domain: string): string {
 function getDomainSpecificLogo(domain: string): string | null {
   // Add specific logos for domains where we know the API fails
   const domainSpecificLogos: Record<string, string> = {
-    'bamboohr.com': 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg'
+    'bamboohr.com': 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg',
+    'apple.com': 'https://www.apple.com/favicon.ico'
   };
 
   return domainSpecificLogos[domain] || null;

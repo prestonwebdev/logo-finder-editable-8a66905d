@@ -35,6 +35,43 @@ const knownBrandData: Record<string, Partial<CompanyData>> = {
   'bamboohr.com': {
     brandColor: '#7AC142',
     logo: 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg'
+  },
+  'apple.com': {
+    brandColor: '#000000',
+    logo: 'https://www.apple.com/favicon.ico'
+  }
+};
+
+// Try to fetch favicon as a fallback
+const tryFetchFavicon = async (domain: string): Promise<string | null> => {
+  try {
+    // Common favicon locations
+    const faviconUrls = [
+      `https://${domain}/favicon.ico`,
+      `https://${domain}/favicon.png`,
+      `https://www.${domain}/favicon.ico`,
+      `https://www.${domain}/favicon.png`,
+      `https://${domain}/apple-touch-icon.png`,
+      `https://www.${domain}/apple-touch-icon.png`
+    ];
+    
+    // Try each potential favicon URL
+    for (const url of faviconUrls) {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        if (response.ok) {
+          console.log(`Found favicon at: ${url}`);
+          return url;
+        }
+      } catch (err) {
+        // Continue to next URL if this one fails
+        continue;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching favicon:', error);
+    return null;
   }
 };
 
@@ -81,6 +118,17 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
         };
       }
       
+      // Try to fetch favicon as a fallback
+      if (domain) {
+        const favicon = await tryFetchFavicon(domain);
+        if (favicon) {
+          return {
+            logo: favicon,
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+          };
+        }
+      }
+      
       return defaultData;
     }
 
@@ -93,6 +141,17 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
           logo: knownBrandData[domain].logo || defaultData.logo,
           brandColor: knownBrandData[domain].brandColor || defaultData.brandColor
         };
+      }
+      
+      // Try to fetch favicon as a fallback
+      if (domain) {
+        const favicon = await tryFetchFavicon(domain);
+        if (favicon) {
+          return {
+            logo: favicon,
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+          };
+        }
       }
       
       return defaultData;
@@ -108,8 +167,20 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       logo = knownBrandData[domain].logo!;
       console.log('Using known logo for domain:', domain, logo);
     } else if (!logo || logo === 'undefined' || logo.includes('data:,')) {
-      console.warn('Invalid logo URL, falling back to default:', logo);
-      logo = defaultData.logo;
+      console.warn('Invalid logo URL, trying to fetch favicon...');
+      
+      // Try to fetch favicon as a fallback
+      if (domain) {
+        const favicon = await tryFetchFavicon(domain);
+        if (favicon) {
+          logo = favicon;
+          console.log('Using favicon as fallback:', favicon);
+        } else {
+          logo = defaultData.logo;
+        }
+      } else {
+        logo = defaultData.logo;
+      }
     }
     
     // Get brand color from the API response or use known brand color if available
