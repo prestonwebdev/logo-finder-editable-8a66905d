@@ -28,7 +28,13 @@ const ResultsPage: React.FC = () => {
       console.log('Fetching website data for:', websiteUrl);
       const data = await extractFromWebsite(websiteUrl);
       console.log('Received website data:', data);
-      setCompanyData(data);
+      
+      // Ensure we use the brand color from the website
+      setCompanyData({
+        logo: data.logo,
+        brandColor: data.brandColor
+      });
+      
       toast.success('Website data extracted successfully');
     } catch (error) {
       console.error('Error extracting data:', error);
@@ -120,7 +126,7 @@ const ResultsPage: React.FC = () => {
 
   return (
     <div className="page-transition-container">
-      <Logo className="mb-24" companyColor={companyData.brandColor} />
+      <Logo className="mb-24" companyLogo={companyData.logo} companyColor={companyData.brandColor} />
       
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -160,12 +166,13 @@ const ResultsPage: React.FC = () => {
                     className="max-w-full max-h-full object-contain" 
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = '/placeholder.svg';
-                      toast.error("Couldn't load logo, using placeholder instead");
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentElement!.innerHTML = '<span class="text-white/80 text-sm font-medium">No Logo Found</span>';
+                      toast.error("Couldn't load logo");
                     }}
                   />
                 ) : (
-                  <div className="text-center text-white/50">No logo found</div>
+                  <div className="text-center text-white/80 text-sm font-medium">No Logo Found</div>
                 )}
               </motion.div>
               <label className="cursor-pointer">

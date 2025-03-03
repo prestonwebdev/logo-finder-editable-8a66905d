@@ -68,7 +68,7 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       }
     }
 
-    // Transform the response to match our CompanyData interface
+    // Ensure brand_color is correctly used
     return {
       logo,
       brandColor: data.brand_color || defaultData.brandColor

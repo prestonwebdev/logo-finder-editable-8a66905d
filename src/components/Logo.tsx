@@ -38,7 +38,14 @@ const Logo: React.FC<LogoProps> = ({
           className="max-w-full max-h-full object-contain"
           onError={(e) => {
             e.currentTarget.onerror = null;
-            e.currentTarget.src = '/placeholder.svg';
+            // Instead of showing a placeholder image, hide the image and show text
+            e.currentTarget.style.display = 'none';
+            // Adding a text node as a sibling element doesn't work well
+            // So we'll change the parent div content
+            const parentDiv = e.currentTarget.parentElement;
+            if (parentDiv) {
+              parentDiv.innerHTML = '<span class="text-xs font-medium text-center">No Logo Found</span>';
+            }
           }}
         />
       </motion.div>
