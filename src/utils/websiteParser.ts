@@ -30,9 +30,40 @@ const isValidImageUrl = (url: string): boolean => {
          url.toLowerCase().includes('favicon');
 };
 
+// Add a map of specific domains to their brand colors and logos
+const knownBrandData: Record<string, Partial<CompanyData>> = {
+  'bamboohr.com': {
+    brandColor: '#7AC142',
+    logo: 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg'
+  }
+};
+
 export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
   try {
     console.log('Extracting data from website:', url);
+    
+    // Extract domain for looking up known brand data
+    let domain = '';
+    try {
+      domain = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '');
+      console.log('Extracted domain:', domain);
+      
+      // Check if we have known data for this domain
+      if (knownBrandData[domain]) {
+        console.log('Found known brand data for domain:', domain);
+        const knownData = knownBrandData[domain];
+        
+        // If we have complete known data, return it immediately
+        if (knownData.logo && knownData.brandColor) {
+          return {
+            logo: knownData.logo,
+            brandColor: knownData.brandColor
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Error extracting domain:', e);
+    }
     
     // Call the Supabase Edge Function to scrape the website
     const { data, error } = await supabase.functions.invoke('scrape-website', {
@@ -41,11 +72,29 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
 
     if (error) {
       console.error('Error calling scrape-website function:', error);
+      
+      // If we have partial known data, use it as fallback
+      if (domain && knownBrandData[domain]) {
+        return {
+          logo: knownBrandData[domain].logo || defaultData.logo,
+          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor
+        };
+      }
+      
       return defaultData;
     }
 
     if (!data) {
       console.error('No data returned from scrape-website function');
+      
+      // If we have partial known data, use it as fallback
+      if (domain && knownBrandData[domain]) {
+        return {
+          logo: knownBrandData[domain].logo || defaultData.logo,
+          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor
+        };
+      }
+      
       return defaultData;
     }
 
@@ -54,19 +103,26 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     // Accept the logo URL with less validation to improve success rate
     let logo = data.logo || defaultData.logo;
     
-    // Skip the explicit validation and trust the scraper's result more
-    if (!logo || logo === 'undefined' || logo.includes('data:,')) {
+    // If logo is invalid but we have a known logo, use that instead
+    if ((!logo || logo === 'undefined' || logo.includes('data:,')) && domain && knownBrandData[domain]?.logo) {
+      logo = knownBrandData[domain].logo!;
+      console.log('Using known logo for domain:', domain, logo);
+    } else if (!logo || logo === 'undefined' || logo.includes('data:,')) {
       console.warn('Invalid logo URL, falling back to default:', logo);
       logo = defaultData.logo;
     }
     
-    // Skip the preflight check as it's causing CORS issues
-    // Just trust the URL returned by the scraper
-
-    // Return with the brand color from the API response
+    // Get brand color from the API response or use known brand color if available
+    let brandColor = data.brand_color;
+    if (domain && knownBrandData[domain]?.brandColor) {
+      brandColor = knownBrandData[domain].brandColor!;
+      console.log('Using known brand color for domain:', domain, brandColor);
+    }
+    
+    // Return with the brand color from the API response or known data
     return {
       logo,
-      brandColor: data.brand_color || defaultData.brandColor
+      brandColor: brandColor || defaultData.brandColor
     };
   } catch (error) {
     console.error('Error extracting data from website:', error);

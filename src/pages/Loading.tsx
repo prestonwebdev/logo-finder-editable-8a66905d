@@ -8,7 +8,6 @@ import Logo from '@/components/Logo';
 const LoadingPage: React.FC = () => {
   const navigate = useNavigate();
   const [logoCompleted, setLogoCompleted] = React.useState(false);
-  const [industryCompleted, setIndustryCompleted] = React.useState(false);
   const [colorCompleted, setColorCompleted] = React.useState(false);
 
   useEffect(() => {
@@ -17,21 +16,16 @@ const LoadingPage: React.FC = () => {
       setLogoCompleted(true);
     }, 1500);
     
-    const industryTimer = setTimeout(() => {
-      setIndustryCompleted(true);
-    }, 2500);
-    
     const colorTimer = setTimeout(() => {
       setColorCompleted(true);
-    }, 3500);
+    }, 2500);
     
     const completionTimer = setTimeout(() => {
       navigate('/results');
-    }, 4500);
+    }, 3500);
     
     return () => {
       clearTimeout(logoTimer);
-      clearTimeout(industryTimer);
       clearTimeout(colorTimer);
       clearTimeout(completionTimer);
     };
@@ -75,28 +69,6 @@ const LoadingPage: React.FC = () => {
           </div>
           
           <div className="flex items-center justify-between">
-            {industryCompleted ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center"
-              >
-                <CheckCircle className="success-icon" />
-                <span>Industry</span>
-              </motion.div>
-            ) : (
-              <div className="flex items-center">
-                <motion.div 
-                  className="h-6 w-6 rounded-full bg-white/20 mr-2"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.5, delay: 0.5 }}
-                />
-                <span className="text-white/70">Industry</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center justify-between">
             {colorCompleted ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.5 }}
@@ -111,7 +83,7 @@ const LoadingPage: React.FC = () => {
                 <motion.div 
                   className="h-6 w-6 rounded-full bg-white/20 mr-2"
                   animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.5, delay: 1 }}
+                  transition={{ repeat: Infinity, duration: 1.5, delay: 0.5 }}
                 />
                 <span className="text-white/70">Brand Color</span>
               </div>

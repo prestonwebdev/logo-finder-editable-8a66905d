@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.1.0";
 
@@ -48,6 +47,7 @@ const knownBrandColors: Record<string, string> = {
   'hp.com': '#0096D6',
   'oracle.com': '#C74634',
   'cisco.com': '#1BA0D7',
+  'bamboohr.com': '#7AC142',
 };
 
 // Helper function to extract domain from URL
@@ -249,6 +249,16 @@ function extractBrandColor(html: string, domain: string): string {
   return '#0052CC';
 }
 
+// Special case for domain-specific logo handling
+function getDomainSpecificLogo(domain: string): string | null {
+  // Add specific logos for domains where we know the API fails
+  const domainSpecificLogos: Record<string, string> = {
+    'bamboohr.com': 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg'
+  };
+
+  return domainSpecificLogos[domain] || null;
+}
+
 // Main function to scrape website and extract data
 async function scrapeWebsite(url: string) {
   console.log(`Scraping website: ${url}`);
@@ -275,6 +285,31 @@ async function scrapeWebsite(url: string) {
     const baseUrl = new URL(fullUrl).origin;
     const domain = extractDomain(url);
     
+    // Check for domain-specific logo
+    const domainSpecificLogo = getDomainSpecificLogo(domain);
+    
+    // If we have cached data and a domain-specific logo that's better, update it
+    if (existingData && domainSpecificLogo) {
+      console.log(`Updating cached data with domain-specific logo for ${domain}`);
+      
+      // Update the record with the domain-specific logo
+      const { error: updateError } = await supabase
+        .from('website_data')
+        .update({ logo: domainSpecificLogo })
+        .eq('id', existingData.id);
+        
+      if (updateError) {
+        console.error('Error updating website data:', updateError);
+      } else {
+        console.log('Successfully updated website data with domain-specific logo');
+        // Return the updated data
+        return {
+          ...existingData,
+          logo: domainSpecificLogo
+        };
+      }
+    }
+    
     // If we have cached data, but it's using the default color and we know the brand color,
     // update it with the known brand color
     if (existingData) {
@@ -300,6 +335,15 @@ async function scrapeWebsite(url: string) {
       }
       
       console.log('Found cached data:', existingData);
+      
+      // If we have a domain specific logo, override the cached data
+      if (domainSpecificLogo) {
+        return {
+          ...existingData,
+          logo: domainSpecificLogo
+        };
+      }
+      
       return existingData;
     }
     
@@ -317,8 +361,8 @@ async function scrapeWebsite(url: string) {
     
     const html = await response.text();
     
-    // Extract logo URL using enhanced strategy
-    const logoUrl = await extractLogo(html, baseUrl);
+    // Use domain-specific logo if available, otherwise extract logo URL using enhanced strategy
+    const logoUrl = domainSpecificLogo || await extractLogo(html, baseUrl);
     
     // Extract brand color with known colors for popular sites
     const brandColor = extractBrandColor(html, domain);
@@ -346,11 +390,16 @@ async function scrapeWebsite(url: string) {
     return result;
   } catch (error) {
     console.error('Error scraping website:', error);
-    // Return default values on error
+    
+    // Check if we have a domain-specific logo for fallback
+    const domain = extractDomain(url);
+    const domainSpecificLogo = getDomainSpecificLogo(domain);
+    
+    // Return default values on error, but use domain-specific logo if available
     return {
       url,
-      logo: '/placeholder.svg',
-      brand_color: '#0052CC', // Using a more neutral blue as default
+      logo: domainSpecificLogo || '/placeholder.svg',
+      brand_color: knownBrandColors[domain] || '#0052CC', // Using a more neutral blue as default
     };
   }
 }
