@@ -12,16 +12,22 @@ const defaultData: CompanyData = {
   brandColor: '#00D5AC'
 };
 
-// Helper function to validate image URLs
+// Helper function to validate image URLs with less strict validation
 const isValidImageUrl = (url: string): boolean => {
-  // Check if it's a data URL
+  // If it's a data URL, it's valid
   if (url.startsWith('data:image/')) {
     return true;
   }
   
-  // Check common image extensions
+  // Accept any URL that looks like an image path
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.bmp'];
-  return imageExtensions.some(ext => url.toLowerCase().endsWith(ext)) || url.includes('/favicon');
+  
+  // Check if it has an image extension or contains keywords that suggest it's an image
+  return imageExtensions.some(ext => url.toLowerCase().includes(ext)) || 
+         url.toLowerCase().includes('logo') || 
+         url.toLowerCase().includes('icon') || 
+         url.toLowerCase().includes('image') ||
+         url.toLowerCase().includes('favicon');
 };
 
 export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
@@ -45,30 +51,19 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
 
     console.log('Received data from scrape-website function:', data);
 
-    // Validate the logo URL and use default if it's not valid
+    // Accept the logo URL with less validation to improve success rate
     let logo = data.logo || defaultData.logo;
     
-    // Check if the logo URL is valid
-    if (!isValidImageUrl(logo)) {
-      console.warn('Invalid logo URL format, falling back to default:', logo);
+    // Skip the explicit validation and trust the scraper's result more
+    if (!logo || logo === 'undefined' || logo.includes('data:,')) {
+      console.warn('Invalid logo URL, falling back to default:', logo);
       logo = defaultData.logo;
     }
     
-    // Additional preflight check for the logo
-    if (logo !== defaultData.logo && !logo.startsWith('data:')) {
-      try {
-        const response = await fetch(logo, { method: 'HEAD' });
-        if (!response.ok) {
-          console.warn('Logo URL not accessible, falling back to default:', logo);
-          logo = defaultData.logo;
-        }
-      } catch (e) {
-        console.error('Error checking logo URL:', e);
-        logo = defaultData.logo;
-      }
-    }
+    // Skip the preflight check as it's causing CORS issues
+    // Just trust the URL returned by the scraper
 
-    // Ensure brand_color is correctly used
+    // Return with the brand color from the API response
     return {
       logo,
       brandColor: data.brand_color || defaultData.brandColor

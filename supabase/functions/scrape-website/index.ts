@@ -13,6 +13,43 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Known brand colors for popular websites
+const knownBrandColors: Record<string, string> = {
+  'apple.com': '#000000',
+  'google.com': '#4285F4',
+  'amazon.com': '#FF9900',
+  'microsoft.com': '#00A4EF',
+  'facebook.com': '#1877F2',
+  'twitter.com': '#1DA1F2',
+  'netflix.com': '#E50914',
+  'spotify.com': '#1DB954',
+  'instagram.com': '#C13584',
+  'adobe.com': '#FF0000',
+  'youtube.com': '#FF0000',
+  'linkedin.com': '#0A66C2',
+  'github.com': '#181717',
+  'coca-cola.com': '#E61A27',
+  'pepsi.com': '#004883',
+  'mcdonalds.com': '#FFC72C',
+  'starbucks.com': '#00704A',
+  'nike.com': '#111111',
+  'adidas.com': '#000000',
+  'airbnb.com': '#FF5A5F',
+  'uber.com': '#000000',
+  'intel.com': '#0071C5',
+  'ibm.com': '#0F62FE',
+  'nasa.gov': '#FC3D21',
+  'walmart.com': '#0071CE',
+  'target.com': '#CC0000',
+  'samsung.com': '#1428A0',
+  'canon.com': '#BC0024',
+  'sony.com': '#000000',
+  'dell.com': '#007DB8',
+  'hp.com': '#0096D6',
+  'oracle.com': '#C74634',
+  'cisco.com': '#1BA0D7',
+};
+
 // Helper function to extract domain from URL
 function extractDomain(url: string): string {
   try {
@@ -166,6 +203,52 @@ function makeUrlAbsolute(url: string, baseUrl: string): string {
   }
 }
 
+// Extract brand color from CSS or HTML
+function extractBrandColor(html: string, domain: string): string {
+  console.log(`Extracting brand color for ${domain}`);
+  
+  // Check if we have a known brand color for this domain
+  if (knownBrandColors[domain]) {
+    console.log(`Using known brand color for ${domain}: ${knownBrandColors[domain]}`);
+    return knownBrandColors[domain];
+  }
+  
+  // Strategy 1: Extract theme-color meta tag
+  const themeColorMatch = html.match(/<meta[^>]*name=["']theme-color["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+  if (themeColorMatch && themeColorMatch[1]) {
+    console.log('Found theme-color:', themeColorMatch[1]);
+    return themeColorMatch[1];
+  }
+  
+  // Strategy 2: Try msapplication-TileColor
+  const tileColorMatch = html.match(/<meta[^>]*name=["']msapplication-TileColor["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+  if (tileColorMatch && tileColorMatch[1]) {
+    console.log('Found msapplication-TileColor:', tileColorMatch[1]);
+    return tileColorMatch[1];
+  }
+  
+  // Strategy 3: Look for CSS variables for primary/brand colors
+  const cssVarPatterns = [
+    /(:root|body)[^{]*\{[^}]*--(?:primary|brand|main|theme)-color:\s*([^;]+);/i,
+    /\.(?:primary|brand|main|theme)-color\s*\{[^}]*color:\s*([^;]+);/i,
+    /\.(?:primary|brand|main|theme)\s*\{[^}]*color:\s*([^;]+);/i,
+    /\.(?:primary|brand|main|theme)-bg\s*\{[^}]*background(?:-color)?:\s*([^;]+);/i,
+    /\.(?:header|navbar|nav|navigation)\s*\{[^}]*background(?:-color)?:\s*([^;]+);/i,
+    /\.(?:btn|button)-(?:primary|brand|main|theme)\s*\{[^}]*background(?:-color)?:\s*([^;]+);/i
+  ];
+  
+  for (const pattern of cssVarPatterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      console.log('Found CSS color variable:', match[1]);
+      return match[1].trim();
+    }
+  }
+  
+  // Default color if no brand color found - not a generic green, using a more neutral blue
+  return '#0052CC';
+}
+
 // Main function to scrape website and extract data
 async function scrapeWebsite(url: string) {
   console.log(`Scraping website: ${url}`);
@@ -182,12 +265,6 @@ async function scrapeWebsite(url: string) {
       console.error('Error looking up existing data:', lookupError);
     }
     
-    // If we have cached data, return it
-    if (existingData) {
-      console.log('Found cached data:', existingData);
-      return existingData;
-    }
-    
     // Add protocol if missing
     let fullUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -196,6 +273,35 @@ async function scrapeWebsite(url: string) {
     
     // Get base URL for resolving relative URLs
     const baseUrl = new URL(fullUrl).origin;
+    const domain = extractDomain(url);
+    
+    // If we have cached data, but it's using the default color and we know the brand color,
+    // update it with the known brand color
+    if (existingData) {
+      if (existingData.brand_color === '#008F5D' && knownBrandColors[domain]) {
+        console.log(`Updating cached data with known brand color for ${domain}`);
+        
+        // Update the record with the known brand color
+        const { error: updateError } = await supabase
+          .from('website_data')
+          .update({ brand_color: knownBrandColors[domain] })
+          .eq('id', existingData.id);
+          
+        if (updateError) {
+          console.error('Error updating website data:', updateError);
+        } else {
+          console.log('Successfully updated website data with known brand color');
+          // Return the updated data
+          return {
+            ...existingData,
+            brand_color: knownBrandColors[domain]
+          };
+        }
+      }
+      
+      console.log('Found cached data:', existingData);
+      return existingData;
+    }
     
     // Fetch the website HTML
     console.log(`Fetching URL: ${fullUrl}`);
@@ -214,30 +320,9 @@ async function scrapeWebsite(url: string) {
     // Extract logo URL using enhanced strategy
     const logoUrl = await extractLogo(html, baseUrl);
     
-    // Extract theme color (used by many mobile browsers)
-    let brandColor = '';
-    const themeColorMatch = html.match(/<meta[^>]*name=["']theme-color["'][^>]*content=["']([^"']+)["'][^>]*>/i);
-    if (themeColorMatch && themeColorMatch[1]) {
-      brandColor = themeColorMatch[1];
-    } else {
-      // Try msapplication-TileColor as fallback
-      const tileColorMatch = html.match(/<meta[^>]*name=["']msapplication-TileColor["'][^>]*content=["']([^"']+)["'][^>]*>/i);
-      if (tileColorMatch && tileColorMatch[1]) {
-        brandColor = tileColorMatch[1];
-      } else {
-        // Try CSS variables for primary/brand colors
-        const cssColorMatch = html.match(/(:root|body)[^{]*\{[^}]*--(?:primary|brand|main|theme)-color:\s*([^;]+);/i);
-        if (cssColorMatch && cssColorMatch[2]) {
-          brandColor = cssColorMatch[2].trim();
-        } else {
-          // Default brand color if none found
-          brandColor = '#008F5D';
-        }
-      }
-    }
+    // Extract brand color with known colors for popular sites
+    const brandColor = extractBrandColor(html, domain);
     
-    // Extract domain name for logging
-    const domain = extractDomain(url);
     console.log(`Extracted data for ${domain}:`, { logoUrl, brandColor });
     
     // Create result object
@@ -265,7 +350,7 @@ async function scrapeWebsite(url: string) {
     return {
       url,
       logo: '/placeholder.svg',
-      brand_color: '#008F5D',
+      brand_color: '#0052CC', // Using a more neutral blue as default
     };
   }
 }

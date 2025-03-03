@@ -17,7 +17,7 @@ const Logo: React.FC<LogoProps> = ({
   size = 'md' 
 }) => {
   // If companyLogo is provided, render a company logo
-  if (companyLogo) {
+  if (companyLogo && companyLogo !== '/placeholder.svg') {
     const sizeClasses = {
       sm: "w-8 h-8",
       md: "w-12 h-12",
@@ -48,6 +48,27 @@ const Logo: React.FC<LogoProps> = ({
             }
           }}
         />
+      </motion.div>
+    );
+  }
+  
+  // Show "No Logo Found" text when companyLogo is the placeholder
+  if (companyLogo === '/placeholder.svg') {
+    const sizeClasses = {
+      sm: "w-8 h-8",
+      md: "w-12 h-12",
+      lg: "w-16 h-16"
+    };
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className={cn("flex items-center justify-center overflow-hidden rounded-md", sizeClasses[size], className)}
+        style={{ backgroundColor: companyColor ? `${companyColor}22` : 'transparent' }}
+      >
+        <span className="text-xs font-medium text-center">No Logo Found</span>
       </motion.div>
     );
   }
