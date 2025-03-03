@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.1.0";
 
@@ -377,8 +376,8 @@ function extractBrandColor(html: string, domain: string): string {
     }
   }
   
-  // Default color if no brand color found - not a generic green, using a more neutral blue
-  return '#0052CC';
+  // Default color if no brand color found - changed from blue to black
+  return '#000000';
 }
 
 // Special case for domain-specific logo handling
@@ -514,7 +513,7 @@ async function scrapeWebsite(url: string) {
       const result = {
         url,
         logo: thirdPartyLogo,
-        brand_color: knownBrandColors[domain] || '#0052CC',
+        brand_color: knownBrandColors[domain] || '#000000',
       };
       
       // Store in database for future use
@@ -553,7 +552,7 @@ async function scrapeWebsite(url: string) {
       return {
         url,
         logo: domainSpecificLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-        brand_color: knownBrandColors[domain] || '#0052CC',
+        brand_color: knownBrandColors[domain] || '#000000',
       };
     }
     
@@ -598,7 +597,7 @@ async function scrapeWebsite(url: string) {
     return {
       url,
       logo: domainSpecificLogo || thirdPartyLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-      brand_color: knownBrandColors[domain] || '#0052CC',
+      brand_color: knownBrandColors[domain] || '#000000',
     };
   }
 }

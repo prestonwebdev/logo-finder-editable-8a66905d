@@ -9,7 +9,7 @@ interface CompanyData {
 // Default values when website scraping fails
 const defaultData: CompanyData = {
   logo: '/placeholder.svg',
-  brandColor: '#00D5AC'
+  brandColor: '#000000'  // Changed from #00D5AC to #000000 (black)
 };
 
 // Helper function to validate image URLs with less strict validation
