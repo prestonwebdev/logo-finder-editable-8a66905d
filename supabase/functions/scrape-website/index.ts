@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.1.0";
 
@@ -294,7 +295,7 @@ function extractBrandColor(html: string, domain: string): string {
 function getDomainSpecificLogo(domain: string): string | null {
   // Add specific logos for domains where we know the API fails
   const domainSpecificLogos: Record<string, string> = {
-    'bamboohr.com': 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg',
+    'bamboohr.com': 'https://website-urlsio.vercel.app/lovable-uploads/cf6e8bb0-e648-45ab-bbb8-abf5fc3dcddb.png',
     'apple.com': 'https://www.apple.com/favicon.ico'
   };
 

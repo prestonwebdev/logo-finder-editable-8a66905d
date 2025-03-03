@@ -34,7 +34,7 @@ const isValidImageUrl = (url: string): boolean => {
 const knownBrandData: Record<string, Partial<CompanyData>> = {
   'bamboohr.com': {
     brandColor: '#7AC142',
-    logo: 'https://www.bamboohr.com/images/logos/bamboohr-logo.svg'
+    logo: '/lovable-uploads/cf6e8bb0-e648-45ab-bbb8-abf5fc3dcddb.png'
   },
   'apple.com': {
     brandColor: '#000000',
