@@ -3,14 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface CompanyData {
   logo: string;
-  industry: string;
   brandColor: string;
 }
 
 // Default values when website scraping fails
 const defaultData: CompanyData = {
   logo: '/placeholder.svg',
-  industry: 'Technology',
   brandColor: '#00D5AC'
 };
 
@@ -28,6 +26,8 @@ const isValidImageUrl = (url: string): boolean => {
 
 export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
   try {
+    console.log('Extracting data from website:', url);
+    
     // Call the Supabase Edge Function to scrape the website
     const { data, error } = await supabase.functions.invoke('scrape-website', {
       body: { url },
@@ -42,6 +42,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       console.error('No data returned from scrape-website function');
       return defaultData;
     }
+
+    console.log('Received data from scrape-website function:', data);
 
     // Validate the logo URL and use default if it's not valid
     let logo = data.logo || defaultData.logo;
@@ -69,7 +71,6 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     // Transform the response to match our CompanyData interface
     return {
       logo,
-      industry: data.industry || defaultData.industry,
       brandColor: data.brand_color || defaultData.brandColor
     };
   } catch (error) {

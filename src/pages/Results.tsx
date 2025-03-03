@@ -1,14 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Upload, Edit2, RefreshCw } from 'lucide-react';
+import { Upload, RefreshCw } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { extractFromWebsite } from '@/utils/websiteParser';
 
 interface CompanyData {
   logo: string;
-  industry: string;
   brandColor: string;
 }
 
@@ -16,18 +16,18 @@ const ResultsPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [editingIndustry, setEditingIndustry] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [companyData, setCompanyData] = useState<CompanyData>({
     logo: '/placeholder.svg',
-    industry: 'Technology',
     brandColor: '#008F5D'
   });
 
   const fetchWebsiteData = async (websiteUrl: string) => {
     setIsLoading(true);
     try {
+      console.log('Fetching website data for:', websiteUrl);
       const data = await extractFromWebsite(websiteUrl);
+      console.log('Received website data:', data);
       setCompanyData(data);
       toast.success('Website data extracted successfully');
     } catch (error) {
@@ -81,13 +81,6 @@ const ResultsPage: React.FC = () => {
     });
   };
 
-  const handleIndustryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCompanyData({
-      ...companyData,
-      industry: e.target.value
-    });
-  };
-
   const saveAndContinue = () => {
     toast.success('Company details saved successfully');
     setTimeout(() => {
@@ -127,7 +120,7 @@ const ResultsPage: React.FC = () => {
 
   return (
     <div className="page-transition-container">
-      <Logo className="mb-24" />
+      <Logo className="mb-24" companyColor={companyData.brandColor} />
       
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -158,6 +151,7 @@ const ResultsPage: React.FC = () => {
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 className="w-48 h-24 flex items-center justify-center overflow-hidden glass-panel p-2 rounded-md"
+                style={{ backgroundColor: companyData.brandColor ? `${companyData.brandColor}22` : 'transparent' }}
               >
                 {companyData.logo ? (
                   <img 
@@ -189,39 +183,6 @@ const ResultsPage: React.FC = () => {
                   <Upload className="h-5 w-5" />
                 </motion.div>
               </label>
-            </div>
-          </div>
-          
-          <div className="flex justify-between items-center">
-            <span className="text-lg">Industry</span>
-            <div className="flex items-center space-x-4">
-              {editingIndustry ? (
-                <motion.input
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  type="text"
-                  value={companyData.industry}
-                  onChange={handleIndustryChange}
-                  onBlur={() => setEditingIndustry(false)}
-                  autoFocus
-                  className="glass-panel py-2 px-4 rounded-md url-input w-40 text-base text-right"
-                />
-              ) : (
-                <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  className="glass-panel py-2 px-4 rounded-md min-w-[160px] text-right"
-                >
-                  {companyData.industry}
-                </motion.div>
-              )}
-              <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setEditingIndustry(true)}
-                className="h-10 w-10 glass-panel rounded-full flex items-center justify-center cursor-pointer"
-              >
-                <Edit2 className="h-5 w-5" />
-              </motion.div>
             </div>
           </div>
           
@@ -264,7 +225,11 @@ const ResultsPage: React.FC = () => {
         >
           <motion.button
             onClick={saveAndContinue}
-            className="px-10 py-3 bg-primary text-primary-foreground rounded-full font-medium"
+            className="px-10 py-3 rounded-full font-medium"
+            style={{ 
+              backgroundColor: companyData.brandColor,
+              color: '#fff'
+            }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >

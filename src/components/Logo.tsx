@@ -30,7 +30,7 @@ const Logo: React.FC<LogoProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
         className={cn("flex items-center justify-center overflow-hidden rounded-md", sizeClasses[size], className)}
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: companyColor ? companyColor : 'transparent' }}
       >
         <img 
           src={companyLogo} 
@@ -54,7 +54,7 @@ const Logo: React.FC<LogoProps> = ({
       className={cn("select-none", className)}
     >
       <h1 className="text-3xl font-bold tracking-tight">
-        url<span className="text-primary">.io</span>
+        url<span style={{ color: companyColor || 'hsl(var(--primary))' }}>io</span>
       </h1>
     </motion.div>
   );

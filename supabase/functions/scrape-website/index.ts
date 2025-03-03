@@ -24,9 +24,68 @@ function extractDomain(url: string): string {
   }
 }
 
+// Find navigation elements based on common selectors and HTML structures
+function findNavigationElements(html: string): string[] {
+  const navSelectors = [
+    '<nav[^>]*>.*?<\/nav>',
+    '<header[^>]*>.*?<\/header>',
+    '<div[^>]*class=["\'].*?[header|navigation|navbar|nav-bar|top-bar|menu].*?["\'].*?>.*?<\/div>',
+    '<ul[^>]*class=["\'].*?[nav|navbar|menu|main-menu].*?["\'].*?>.*?<\/ul>'
+  ];
+  
+  let navElements: string[] = [];
+  
+  for (const selector of navSelectors) {
+    const regex = new RegExp(selector, 'gis');
+    const matches = html.match(regex);
+    if (matches) {
+      navElements = [...navElements, ...matches];
+    }
+  }
+  
+  return navElements;
+}
+
+// Extract images from navigation elements
+function extractImagesFromNav(html: string): string[] {
+  const navElements = findNavigationElements(html);
+  let images: string[] = [];
+  
+  const imgRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  
+  for (const navElement of navElements) {
+    let match;
+    while ((match = imgRegex.exec(navElement)) !== null) {
+      if (match[1] && !match[1].includes('data:image/svg+xml')) {
+        images.push(match[1]);
+      }
+    }
+  }
+  
+  return images;
+}
+
 // Advanced logo extraction function with multiple fallback strategies
 async function extractLogo(html: string, baseUrl: string): Promise<string> {
-  // Strategy 1: Try to find structured data (JSON-LD)
+  console.log('Extracting logo for', baseUrl);
+  
+  // Strategy 1: Look for images in navigation elements (new primary strategy)
+  const navImages = extractImagesFromNav(html);
+  console.log('Found navigation images:', navImages.length);
+  
+  // Filter for likely logo images (typically small, contain words like 'logo')
+  const likelyLogoImages = navImages.filter(img => 
+    img.toLowerCase().includes('logo') || 
+    !img.toLowerCase().includes('banner') || 
+    !img.toLowerCase().includes('hero')
+  );
+  
+  if (likelyLogoImages.length > 0) {
+    console.log('Found likely logo in navigation:', likelyLogoImages[0]);
+    return makeUrlAbsolute(likelyLogoImages[0], baseUrl);
+  }
+  
+  // Strategy 2: Try to find structured data (JSON-LD)
   const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
   if (jsonLdMatch && jsonLdMatch[1]) {
     try {
@@ -37,6 +96,7 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
                   (jsonData.publisher && jsonData.publisher.logo);
       
       if (logo && typeof logo === 'string') {
+        console.log('Found logo in JSON-LD:', logo);
         return makeUrlAbsolute(logo, baseUrl);
       }
     } catch (e) {
@@ -44,31 +104,50 @@ async function extractLogo(html: string, baseUrl: string): Promise<string> {
     }
   }
   
-  // Strategy 2: Look for Apple touch icons (usually high quality)
+  // Strategy 3: Look for Apple touch icons (usually high quality)
   const appleTouchIconMatch = html.match(/<link[^>]*rel=["']apple-touch-icon(-precomposed)?["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (appleTouchIconMatch && appleTouchIconMatch[2]) {
+    console.log('Found Apple touch icon:', appleTouchIconMatch[2]);
     return makeUrlAbsolute(appleTouchIconMatch[2], baseUrl);
   }
   
-  // Strategy 3: Look for favicon with .ico, .png or other extensions
+  // Strategy 4: Look for favicon with .ico, .png or other extensions
   const faviconMatch = html.match(/<link[^>]*rel=["'](icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   if (faviconMatch && faviconMatch[2]) {
+    console.log('Found favicon:', faviconMatch[2]);
     return makeUrlAbsolute(faviconMatch[2], baseUrl);
   }
   
-  // Strategy 4: Look for Open Graph image
+  // Strategy 5: Look for Open Graph image
   const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (ogImageMatch && ogImageMatch[1]) {
+    console.log('Found OG image:', ogImageMatch[1]);
     return makeUrlAbsolute(ogImageMatch[1], baseUrl);
   }
   
-  // Strategy 5: Look for Twitter image
+  // Strategy 6: Look for Twitter image
   const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (twitterImageMatch && twitterImageMatch[1]) {
+    console.log('Found Twitter image:', twitterImageMatch[1]);
     return makeUrlAbsolute(twitterImageMatch[1], baseUrl);
   }
   
-  // Strategy 6: Check for a default /favicon.ico which many sites have
+  // Strategy 7: Any SVG in the page (might be logos)
+  const svgMatch = html.match(/<img[^>]*src=["']([^"']+\.svg)["'][^>]*>/i);
+  if (svgMatch && svgMatch[1]) {
+    console.log('Found SVG image:', svgMatch[1]);
+    return makeUrlAbsolute(svgMatch[1], baseUrl);
+  }
+  
+  // Strategy 8: Check for any small PNG images that might be logos
+  const smallPngMatch = html.match(/<img[^>]*src=["']([^"']+\.png)["'][^>]*>/i);
+  if (smallPngMatch && smallPngMatch[1]) {
+    console.log('Found PNG image:', smallPngMatch[1]);
+    return makeUrlAbsolute(smallPngMatch[1], baseUrl);
+  }
+  
+  // Strategy 9: Check for a default /favicon.ico which many sites have
+  console.log('Using default favicon.ico as fallback');
   return `${baseUrl}/favicon.ico`;
 }
 
@@ -146,50 +225,25 @@ async function scrapeWebsite(url: string) {
       if (tileColorMatch && tileColorMatch[1]) {
         brandColor = tileColorMatch[1];
       } else {
-        // Default brand color if none found
-        brandColor = '#008F5D';
-      }
-    }
-    
-    // Attempt to determine industry (this is harder and less reliable)
-    // For now, use a simplified approach based on keywords
-    let industry = 'Technology'; // Default
-    
-    const industryKeywords = {
-      'finance|banking|investment|insurance|capital|wealth|money|payment|credit|loan': 'Finance',
-      'health|healthcare|medical|wellness|fitness|doctor|hospital|clinic|patient|pharmacy': 'Healthcare',
-      'retail|shop|store|buy|purchase|ecommerce|e-commerce|product|shopping': 'Retail',
-      'travel|hotel|booking|flight|vacation|tourism|trip|holiday|destination': 'Travel',
-      'food|restaurant|dining|cuisine|meal|recipe|menu|cook|chef|eat': 'Food & Dining',
-      'education|learning|course|university|school|college|academy|student|teach|class': 'Education',
-      'media|news|entertainment|film|movie|music|game|stream|video|podcast': 'Media & Entertainment',
-      'real estate|property|home|apartment|housing|rent|mortgage|house|building': 'Real Estate',
-      'marketing|advertising|agency|brand|campaign|design|creative|studio': 'Marketing & Creative',
-      'legal|law|attorney|lawyer|firm|counsel|litigation|court': 'Legal Services',
-      'consulting|business service|professional service|solution|strategy': 'Business Services',
-      'technology|software|app|digital|tech|data|cloud|IT|computer|internet': 'Technology',
-      'manufacturing|industrial|factory|production|engineering|machine': 'Manufacturing',
-      'nonprofit|charity|foundation|community|donate|volunteer': 'Nonprofit',
-      'government|public|official|administration|policy': 'Government'
-    };
-    
-    for (const [keywords, industryName] of Object.entries(industryKeywords)) {
-      const regex = new RegExp(keywords, 'i');
-      if (regex.test(html)) {
-        industry = industryName;
-        break;
+        // Try CSS variables for primary/brand colors
+        const cssColorMatch = html.match(/(:root|body)[^{]*\{[^}]*--(?:primary|brand|main|theme)-color:\s*([^;]+);/i);
+        if (cssColorMatch && cssColorMatch[2]) {
+          brandColor = cssColorMatch[2].trim();
+        } else {
+          // Default brand color if none found
+          brandColor = '#008F5D';
+        }
       }
     }
     
     // Extract domain name for logging
     const domain = extractDomain(url);
-    console.log(`Extracted data for ${domain}:`, { logoUrl, industry, brandColor });
+    console.log(`Extracted data for ${domain}:`, { logoUrl, brandColor });
     
     // Create result object
     const result = {
       url,
       logo: logoUrl,
-      industry,
       brand_color: brandColor,
     };
     
@@ -211,7 +265,6 @@ async function scrapeWebsite(url: string) {
     return {
       url,
       logo: '/placeholder.svg',
-      industry: 'Technology',
       brand_color: '#008F5D',
     };
   }
