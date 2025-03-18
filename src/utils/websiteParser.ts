@@ -286,15 +286,23 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     
     // Get brand color from the API response or use known brand color if available
     let brandColor = data.brand_color;
+    
+    // If brand color is missing, undefined, or empty, use black as default
+    if (!brandColor || brandColor === 'undefined' || brandColor === '') {
+      console.log('Brand color is missing or invalid, using default black');
+      brandColor = defaultData.brandColor;
+    }
+    
+    // Use known brand color if available
     if (domain && knownBrandData[domain]?.brandColor) {
       brandColor = knownBrandData[domain].brandColor!;
       console.log('Using known brand color for domain:', domain, brandColor);
     }
     
-    // Return with the brand color from the API response or known data
+    // Return with the brand color from the API response, known data, or default black
     return {
       logo,
-      brandColor: brandColor || defaultData.brandColor
+      brandColor: brandColor || defaultData.brandColor // Ensure black as fallback
     };
   } catch (error) {
     console.error('Error extracting data from website:', error);
