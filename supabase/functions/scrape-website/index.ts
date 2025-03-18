@@ -47,7 +47,6 @@ const knownBrandColors: Record<string, string> = {
   'hp.com': '#0096D6',
   'oracle.com': '#C74634',
   'cisco.com': '#1BA0D7',
-  'bamboohr.com': '#7AC142',
 };
 
 // Helper function to extract domain from URL
@@ -376,7 +375,7 @@ function extractBrandColor(html: string, domain: string): string {
     }
   }
   
-  // Default color if no brand color found - changed from blue to black
+  // Default color if no brand color found - using black
   return '#000000';
 }
 
@@ -384,7 +383,6 @@ function extractBrandColor(html: string, domain: string): string {
 function getDomainSpecificLogo(domain: string): string | null {
   // Add specific logos for domains where we know the API fails
   const domainSpecificLogos: Record<string, string> = {
-    'bamboohr.com': 'https://website-urlsio.vercel.app/lovable-uploads/cf6e8bb0-e648-45ab-bbb8-abf5fc3dcddb.png',
     'apple.com': 'https://www.apple.com/favicon.ico'
   };
 

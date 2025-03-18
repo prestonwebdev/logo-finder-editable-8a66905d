@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 interface CompanyData {
@@ -9,7 +8,7 @@ interface CompanyData {
 // Default values when website scraping fails
 const defaultData: CompanyData = {
   logo: '/placeholder.svg',
-  brandColor: '#000000'  // Changed from #00D5AC to #000000 (black)
+  brandColor: '#000000'  // Default is black
 };
 
 // Helper function to validate image URLs with less strict validation
@@ -32,10 +31,6 @@ const isValidImageUrl = (url: string): boolean => {
 
 // Add a map of specific domains to their brand colors and logos
 const knownBrandData: Record<string, Partial<CompanyData>> = {
-  'bamboohr.com': {
-    brandColor: '#7AC142',
-    logo: '/lovable-uploads/cf6e8bb0-e648-45ab-bbb8-abf5fc3dcddb.png'
-  },
   'apple.com': {
     brandColor: '#000000',
     logo: 'https://www.apple.com/favicon.ico'
