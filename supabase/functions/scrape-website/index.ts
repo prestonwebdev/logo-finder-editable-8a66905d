@@ -138,7 +138,8 @@ function extractLogoByClassOrAlt(html: string): string[] {
 }
 
 // Function to try logo retrieval from third-party services
-async function tryThirdPartyLogoServices(domain: string): Promise<string | null> {
+async function tryThirdPartyLogoServices(domain: string): Promise<string[]> {
+  const logoUrls: string[] = [];
   try {
     // Try Clearbit Logo API (doesn't require API key)
     const clearbitUrl = `https://logo.clearbit.com/${domain}`;
@@ -146,7 +147,7 @@ async function tryThirdPartyLogoServices(domain: string): Promise<string | null>
       const response = await fetch(clearbitUrl, { method: 'HEAD' });
       if (response.ok) {
         console.log(`Found logo via Clearbit: ${clearbitUrl}`);
-        return clearbitUrl;
+        logoUrls.push(clearbitUrl);
       }
     } catch (err) {
       console.log('Clearbit API failed, trying other sources...');
@@ -158,7 +159,7 @@ async function tryThirdPartyLogoServices(domain: string): Promise<string | null>
       const response = await fetch(googleFaviconUrl, { method: 'HEAD' });
       if (response.ok) {
         console.log(`Found logo via Google Favicon: ${googleFaviconUrl}`);
-        return googleFaviconUrl;
+        logoUrls.push(googleFaviconUrl);
       }
     } catch (err) {
       console.log('Google favicon service failed, trying other sources...');
@@ -170,35 +171,53 @@ async function tryThirdPartyLogoServices(domain: string): Promise<string | null>
       const response = await fetch(faviconKitUrl, { method: 'HEAD' });
       if (response.ok) {
         console.log(`Found logo via FaviconKit: ${faviconKitUrl}`);
-        return faviconKitUrl;
+        logoUrls.push(faviconKitUrl);
       }
     } catch (err) {
       console.log('FaviconKit API failed');
     }
     
-    return null;
+    return logoUrls;
   } catch (error) {
     console.error('Error fetching from third-party services:', error);
-    return null;
+    return [];
   }
 }
 
 // Advanced logo extraction function with multiple fallback strategies
-async function extractLogo(html: string, baseUrl: string, domain: string): Promise<string> {
+async function extractLogo(html: string, baseUrl: string, domain: string): Promise<{ primary: string, alternatives: string[] }> {
   console.log('Extracting logo for', baseUrl);
+  const alternativeLogos: string[] = [];
+  let primaryLogo = "";
   
   // Strategy 1: Try third-party logo services first
-  const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
-  if (thirdPartyLogo) {
-    console.log('Using logo from third-party service:', thirdPartyLogo);
-    return thirdPartyLogo;
+  const thirdPartyLogos = await tryThirdPartyLogoServices(domain);
+  if (thirdPartyLogos.length > 0) {
+    console.log('Using logo from third-party service:', thirdPartyLogos[0]);
+    primaryLogo = thirdPartyLogos[0];
+    
+    // Add other logos as alternatives
+    if (thirdPartyLogos.length > 1) {
+      alternativeLogos.push(...thirdPartyLogos.slice(1));
+    }
   }
   
   // Strategy 2: Look for images with logo-related class names or alt text
   const logoByClassOrAlt = extractLogoByClassOrAlt(html);
   if (logoByClassOrAlt.length > 0) {
-    console.log('Found logo by class or alt text:', logoByClassOrAlt[0]);
-    return makeUrlAbsolute(logoByClassOrAlt[0], baseUrl);
+    const logoUrl = makeUrlAbsolute(logoByClassOrAlt[0], baseUrl);
+    console.log('Found logo by class or alt text:', logoUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = logoUrl;
+    } else {
+      alternativeLogos.push(logoUrl);
+    }
+    
+    // Add other logos as alternatives
+    if (logoByClassOrAlt.length > 1) {
+      alternativeLogos.push(...logoByClassOrAlt.slice(1).map(url => makeUrlAbsolute(url, baseUrl)));
+    }
   }
   
   // Strategy 3: Look for images in navigation elements
@@ -213,8 +232,23 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
   );
   
   if (likelyLogoImages.length > 0) {
-    console.log('Found likely logo in navigation:', likelyLogoImages[0]);
-    return makeUrlAbsolute(likelyLogoImages[0], baseUrl);
+    const logoUrl = makeUrlAbsolute(likelyLogoImages[0], baseUrl);
+    console.log('Found likely logo in navigation:', logoUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = logoUrl;
+    } else if (!alternativeLogos.includes(logoUrl)) {
+      alternativeLogos.push(logoUrl);
+    }
+    
+    // Add other likely logos as alternatives
+    if (likelyLogoImages.length > 1) {
+      const additionalLogos = likelyLogoImages.slice(1)
+        .map(url => makeUrlAbsolute(url, baseUrl))
+        .filter(url => !alternativeLogos.includes(url));
+      
+      alternativeLogos.push(...additionalLogos);
+    }
   }
   
   // Strategy 4: Try to find structured data (JSON-LD)
@@ -228,8 +262,14 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
                   (jsonData.publisher && jsonData.publisher.logo);
       
       if (logo && typeof logo === 'string') {
-        console.log('Found logo in JSON-LD:', logo);
-        return makeUrlAbsolute(logo, baseUrl);
+        const logoUrl = makeUrlAbsolute(logo, baseUrl);
+        console.log('Found logo in JSON-LD:', logoUrl);
+        
+        if (!primaryLogo) {
+          primaryLogo = logoUrl;
+        } else if (!alternativeLogos.includes(logoUrl)) {
+          alternativeLogos.push(logoUrl);
+        }
       }
     } catch (e) {
       console.log('JSON-LD parsing error:', e);
@@ -242,7 +282,13 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
   if (svgMatch && svgMatch[0]) {
     console.log('Found inline SVG logo in HTML');
     // Convert SVG to a data URL (simplified for now)
-    return `data:image/svg+xml,${encodeURIComponent(svgMatch[0])}`;
+    const svgLogoUrl = `data:image/svg+xml,${encodeURIComponent(svgMatch[0])}`;
+    
+    if (!primaryLogo) {
+      primaryLogo = svgLogoUrl;
+    } else if (!alternativeLogos.includes(svgLogoUrl)) {
+      alternativeLogos.push(svgLogoUrl);
+    }
   }
   
   // Strategy 6: Look for Apple touch icons (usually high quality)
@@ -253,7 +299,11 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
     
     // Validate that the icon URL is accessible
     if (await validateFaviconUrl(iconUrl)) {
-      return iconUrl;
+      if (!primaryLogo) {
+        primaryLogo = iconUrl;
+      } else if (!alternativeLogos.includes(iconUrl)) {
+        alternativeLogos.push(iconUrl);
+      }
     }
   }
   
@@ -265,7 +315,11 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
     
     // Validate that the icon URL is accessible
     if (await validateFaviconUrl(iconUrl)) {
-      return iconUrl;
+      if (!primaryLogo) {
+        primaryLogo = iconUrl;
+      } else if (!alternativeLogos.includes(iconUrl)) {
+        alternativeLogos.push(iconUrl);
+      }
     }
   }
   
@@ -282,40 +336,80 @@ async function extractLogo(html: string, baseUrl: string, domain: string): Promi
   for (const location of faviconLocations) {
     if (await validateFaviconUrl(location)) {
       console.log('Found favicon at common location:', location);
-      return location;
+      
+      if (!primaryLogo) {
+        primaryLogo = location;
+        break;
+      } else if (!alternativeLogos.includes(location)) {
+        alternativeLogos.push(location);
+      }
     }
   }
   
   // Strategy 9: Look for Open Graph image
   const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (ogImageMatch && ogImageMatch[1]) {
-    console.log('Found OG image:', ogImageMatch[1]);
-    return makeUrlAbsolute(ogImageMatch[1], baseUrl);
+    const ogImageUrl = makeUrlAbsolute(ogImageMatch[1], baseUrl);
+    console.log('Found OG image:', ogImageUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = ogImageUrl;
+    } else if (!alternativeLogos.includes(ogImageUrl)) {
+      alternativeLogos.push(ogImageUrl);
+    }
   }
   
   // Strategy 10: Look for Twitter image
   const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
   if (twitterImageMatch && twitterImageMatch[1]) {
-    console.log('Found Twitter image:', twitterImageMatch[1]);
-    return makeUrlAbsolute(twitterImageMatch[1], baseUrl);
+    const twitterImageUrl = makeUrlAbsolute(twitterImageMatch[1], baseUrl);
+    console.log('Found Twitter image:', twitterImageUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = twitterImageUrl;
+    } else if (!alternativeLogos.includes(twitterImageUrl)) {
+      alternativeLogos.push(twitterImageUrl);
+    }
   }
   
   // Strategy 11: Any SVG in the page (might be logos)
   const svgMatch2 = html.match(/<img[^>]*src=["']([^"']+\.svg)["'][^>]*>/i);
   if (svgMatch2 && svgMatch2[1]) {
-    console.log('Found SVG image:', svgMatch2[1]);
-    return makeUrlAbsolute(svgMatch2[1], baseUrl);
+    const svgUrl = makeUrlAbsolute(svgMatch2[1], baseUrl);
+    console.log('Found SVG image:', svgUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = svgUrl;
+    } else if (!alternativeLogos.includes(svgUrl)) {
+      alternativeLogos.push(svgUrl);
+    }
   }
   
   // Strategy 12: Check for any small PNG images that might be logos
   const smallPngMatch = html.match(/<img[^>]*src=["']([^"']+\.png)["'][^>]*>/i);
   if (smallPngMatch && smallPngMatch[1]) {
-    console.log('Found PNG image:', smallPngMatch[1]);
-    return makeUrlAbsolute(smallPngMatch[1], baseUrl);
+    const pngUrl = makeUrlAbsolute(smallPngMatch[1], baseUrl);
+    console.log('Found PNG image:', pngUrl);
+    
+    if (!primaryLogo) {
+      primaryLogo = pngUrl;
+    } else if (!alternativeLogos.includes(pngUrl)) {
+      alternativeLogos.push(pngUrl);
+    }
   }
   
   // Default to Google's favicon service as last resort
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  if (!primaryLogo) {
+    primaryLogo = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  }
+  
+  // Remove duplicates from alternativeLogos and ensure primaryLogo is not in alternatives
+  const uniqueAlternatives = [...new Set(alternativeLogos)].filter(logo => logo !== primaryLogo);
+  
+  return { 
+    primary: primaryLogo,
+    alternatives: uniqueAlternatives.slice(0, 5) // Limit to 5 alternatives
+  };
 }
 
 // Make relative URLs absolute
@@ -477,14 +571,18 @@ async function scrapeWebsite(url: string) {
       // If the logo in existing data is a placeholder, try to get a better one
       if (!existingData.logo || existingData.logo === '/placeholder.svg') {
         // Try third-party logo services
-        const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
-        if (thirdPartyLogo) {
+        const thirdPartyLogos = await tryThirdPartyLogoServices(domain);
+        if (thirdPartyLogos.length > 0) {
           console.log(`Updating cached data with third-party logo for ${domain}`);
           
           // Update the record with the third-party logo
           const { error: updateError } = await supabase
             .from('website_data')
-            .update({ logo: thirdPartyLogo })
+            .update({ 
+              logo: thirdPartyLogos[0],
+              // Store alternatives in json format in the same row
+              alternativeLogos: thirdPartyLogos.slice(1)
+            })
             .eq('id', existingData.id);
             
           if (updateError) {
@@ -493,25 +591,30 @@ async function scrapeWebsite(url: string) {
             console.log('Successfully updated website data with third-party logo');
             return {
               ...existingData,
-              logo: thirdPartyLogo
+              logo: thirdPartyLogos[0],
+              alternativeLogos: thirdPartyLogos.slice(1)
             };
           }
         }
       }
       
-      return existingData;
+      return {
+        ...existingData,
+        alternativeLogos: [] // Ensure we have this field
+      };
     }
     
     // Try third-party logo services first before fetching the website
-    const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
-    if (thirdPartyLogo) {
-      console.log('Using logo from third-party service:', thirdPartyLogo);
+    const thirdPartyLogos = await tryThirdPartyLogoServices(domain);
+    if (thirdPartyLogos.length > 0) {
+      console.log('Using logo from third-party service:', thirdPartyLogos[0]);
       
       // Create result object
       const result = {
         url,
-        logo: thirdPartyLogo,
+        logo: thirdPartyLogos[0],
         brand_color: knownBrandColors[domain] || '#000000',
+        alternativeLogos: thirdPartyLogos.slice(1)
       };
       
       // Store in database for future use
@@ -551,22 +654,25 @@ async function scrapeWebsite(url: string) {
         url,
         logo: domainSpecificLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
         brand_color: knownBrandColors[domain] || '#000000',
+        alternativeLogos: []
       };
     }
     
-    // Use domain-specific logo if available, otherwise extract logo URL using enhanced strategy
-    const logoUrl = domainSpecificLogo || await extractLogo(html, baseUrl, domain);
+    // Extract logo URLs using enhanced strategy
+    const { primary: logoUrl, alternatives: alternativeLogos } = 
+      await extractLogo(html, baseUrl, domain);
     
     // Extract brand color with known colors for popular sites
     const brandColor = extractBrandColor(html, domain);
     
-    console.log(`Extracted data for ${domain}:`, { logoUrl, brandColor });
+    console.log(`Extracted data for ${domain}:`, { logoUrl, brandColor, alternativeLogos });
     
     // Create result object
     const result = {
       url,
       logo: logoUrl,
       brand_color: brandColor,
+      alternativeLogos: alternativeLogos
     };
     
     // Store in database for future use
@@ -589,13 +695,14 @@ async function scrapeWebsite(url: string) {
     const domainSpecificLogo = getDomainSpecificLogo(domain);
     
     // Try third-party logo services as a last resort
-    const thirdPartyLogo = await tryThirdPartyLogoServices(domain);
+    const thirdPartyLogos = await tryThirdPartyLogoServices(domain);
     
     // Return default values on error, but use domain-specific logo if available
     return {
       url,
-      logo: domainSpecificLogo || thirdPartyLogo || `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+      logo: domainSpecificLogo || (thirdPartyLogos.length > 0 ? thirdPartyLogos[0] : `https://www.google.com/s2/favicons?domain=${domain}&sz=128`),
       brand_color: knownBrandColors[domain] || '#000000',
+      alternativeLogos: thirdPartyLogos.length > 1 ? thirdPartyLogos.slice(1) : []
     };
   }
 }

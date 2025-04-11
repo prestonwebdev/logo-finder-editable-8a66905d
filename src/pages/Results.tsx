@@ -1,14 +1,29 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Upload, RefreshCw } from 'lucide-react';
+import { Upload, RefreshCw, Check, Images } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { extractFromWebsite } from '@/utils/websiteParser';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface CompanyData {
   logo: string;
   brandColor: string;
+  alternativeLogos?: string[];
 }
 
 const ResultsPage: React.FC = () => {
@@ -18,8 +33,10 @@ const ResultsPage: React.FC = () => {
   const [url, setUrl] = useState<string | null>(null);
   const [companyData, setCompanyData] = useState<CompanyData>({
     logo: '/placeholder.svg',
-    brandColor: '#008F5D'
+    brandColor: '#000000',
+    alternativeLogos: []
   });
+  const [showLogoSelector, setShowLogoSelector] = useState(false);
 
   const fetchWebsiteData = async (websiteUrl: string) => {
     setIsLoading(true);
@@ -30,7 +47,8 @@ const ResultsPage: React.FC = () => {
       
       setCompanyData({
         logo: data.logo,
-        brandColor: data.brandColor
+        brandColor: data.brandColor,
+        alternativeLogos: data.alternativeLogos || []
       });
       
       toast.success('Website data extracted successfully');
@@ -85,6 +103,15 @@ const ResultsPage: React.FC = () => {
     });
   };
 
+  const handleSelectLogo = (logoUrl: string) => {
+    setCompanyData({
+      ...companyData,
+      logo: logoUrl
+    });
+    setShowLogoSelector(false);
+    toast.success('Logo updated');
+  };
+
   const saveAndContinue = () => {
     toast.success('Company details saved successfully');
     setTimeout(() => {
@@ -121,6 +148,8 @@ const ResultsPage: React.FC = () => {
       </div>
     );
   }
+
+  const hasAlternativeLogos = companyData.alternativeLogos && companyData.alternativeLogos.length > 0;
 
   return (
     <div className="page-transition-container">
@@ -171,21 +200,86 @@ const ResultsPage: React.FC = () => {
                   <div className="w-full h-full"></div>
                 )}
               </motion.div>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleLogoUpload}
-                />
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="h-10 w-10 glass-panel rounded-full flex items-center justify-center"
-                >
-                  <Upload className="h-5 w-5" />
-                </motion.div>
-              </label>
+              <div className="flex space-x-2">
+                {hasAlternativeLogos && (
+                  <Popover open={showLogoSelector} onOpenChange={setShowLogoSelector}>
+                    <PopoverTrigger asChild>
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="h-10 w-10 glass-panel rounded-full flex items-center justify-center"
+                      >
+                        <Images className="h-5 w-5" />
+                      </motion.button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0 bg-background/95 backdrop-blur-sm border-none">
+                      <div className="p-4 border-b border-border">
+                        <h4 className="font-medium text-sm">Select a logo</h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          We found {companyData.alternativeLogos?.length + 1} logos for this website
+                        </p>
+                      </div>
+                      <div className="p-4 max-h-[300px] overflow-y-auto">
+                        <RadioGroup 
+                          value={companyData.logo}
+                          onValueChange={handleSelectLogo}
+                          className="grid grid-cols-2 gap-4"
+                        >
+                          <div className="col-span-2 flex items-center space-x-2 bg-muted/40 p-2 rounded-md">
+                            <RadioGroupItem value={companyData.logo} id="main-logo" />
+                            <div className="flex-1 overflow-hidden flex items-center justify-center h-20 bg-muted/20 rounded p-1">
+                              <img 
+                                src={companyData.logo} 
+                                alt="Main Logo" 
+                                className="max-w-full max-h-full object-contain"
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null;
+                                  e.currentTarget.src = '/placeholder.svg';
+                                }} 
+                              />
+                            </div>
+                            <div className="ml-2 text-xs text-muted-foreground">Primary</div>
+                          </div>
+                          
+                          {companyData.alternativeLogos?.map((logoUrl, index) => (
+                            <div key={index} className="flex flex-col items-center">
+                              <div className="flex items-center space-x-2 w-full bg-muted/40 p-2 rounded-md">
+                                <RadioGroupItem value={logoUrl} id={`logo-${index}`} />
+                                <div className="flex-1 overflow-hidden flex items-center justify-center h-16 w-full bg-muted/20 rounded p-1">
+                                  <img 
+                                    src={logoUrl} 
+                                    alt={`Alternative Logo ${index + 1}`} 
+                                    className="max-w-full max-h-full object-contain"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.style.display = 'none';
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="h-10 w-10 glass-panel rounded-full flex items-center justify-center"
+                  >
+                    <Upload className="h-5 w-5" />
+                  </motion.div>
+                </label>
+              </div>
             </div>
           </div>
           

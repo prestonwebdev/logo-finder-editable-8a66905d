@@ -1,14 +1,17 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 interface CompanyData {
   logo: string;
   brandColor: string;
+  alternativeLogos?: string[];
 }
 
 // Default values when website scraping fails
 const defaultData: CompanyData = {
   logo: '/placeholder.svg',
-  brandColor: '#000000'  // Default is black
+  brandColor: '#000000',  // Default is black
+  alternativeLogos: []
 };
 
 // Helper function to validate image URLs with less strict validation
@@ -100,7 +103,8 @@ const tryFetchFavicon = async (domain: string): Promise<string | null> => {
 };
 
 // Try to fetch logo from third-party logo APIs
-const tryFetchFromLogoApis = async (domain: string): Promise<string | null> => {
+const tryFetchFromLogoApis = async (domain: string): Promise<string[]> => {
+  const logos: string[] = [];
   try {
     // Try Clearbit Logo API (doesn't require API key)
     const clearbitUrl = `https://logo.clearbit.com/${domain}`;
@@ -108,7 +112,7 @@ const tryFetchFromLogoApis = async (domain: string): Promise<string | null> => {
       const response = await fetch(clearbitUrl, { method: 'HEAD' });
       if (response.ok) {
         console.log(`Found logo via Clearbit: ${clearbitUrl}`);
-        return clearbitUrl;
+        logos.push(clearbitUrl);
       }
     } catch (err) {
       console.log('Clearbit API failed, trying other sources...');
@@ -118,9 +122,9 @@ const tryFetchFromLogoApis = async (domain: string): Promise<string | null> => {
     const faviconKitUrl = `https://api.faviconkit.com/${domain}/144`;
     try {
       const response = await fetch(faviconKitUrl, { method: 'HEAD' });
-      if (response.ok) {
+      if (response.ok && !logos.includes(faviconKitUrl)) {
         console.log(`Found logo via FaviconKit: ${faviconKitUrl}`);
-        return faviconKitUrl;
+        logos.push(faviconKitUrl);
       }
     } catch (err) {
       console.log('FaviconKit API failed, trying other sources...');
@@ -130,15 +134,17 @@ const tryFetchFromLogoApis = async (domain: string): Promise<string | null> => {
     const googleFaviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
     try {
       console.log(`Trying Google favicon: ${googleFaviconUrl}`);
-      return googleFaviconUrl; // Google service almost always returns something
+      if (!logos.includes(googleFaviconUrl)) {
+        logos.push(googleFaviconUrl); // Google service almost always returns something
+      }
     } catch (err) {
       console.log('Google favicon service failed');
     }
     
-    return null;
+    return logos;
   } catch (error) {
     console.error('Error fetching logo from APIs:', error);
-    return null;
+    return [];
   }
 };
 
@@ -148,6 +154,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     
     // Extract domain for looking up known brand data
     let domain = '';
+    const alternativeLogos: string[] = [];
+    
     try {
       domain = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '');
       console.log('Extracted domain:', domain);
@@ -161,7 +169,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
         if (knownData.logo && knownData.brandColor) {
           return {
             logo: knownData.logo,
-            brandColor: knownData.brandColor
+            brandColor: knownData.brandColor,
+            alternativeLogos: []
           };
         }
       }
@@ -177,13 +186,14 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     if (error) {
       console.error('Error calling scrape-website function:', error);
       
-      // First try third-party logo APIs
+      // First try third-party logo APIs to get multiple logos
       if (domain) {
-        const apiLogo = await tryFetchFromLogoApis(domain);
-        if (apiLogo) {
+        const apiLogos = await tryFetchFromLogoApis(domain);
+        if (apiLogos.length > 0) {
           return {
-            logo: apiLogo,
-            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+            logo: apiLogos[0],
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor,
+            alternativeLogos: apiLogos.slice(1)
           };
         }
       }
@@ -194,7 +204,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
         if (favicon) {
           return {
             logo: favicon,
-            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor,
+            alternativeLogos: []
           };
         }
       }
@@ -203,7 +214,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       if (domain && knownBrandData[domain]) {
         return {
           logo: knownBrandData[domain].logo || defaultData.logo,
-          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor
+          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor,
+          alternativeLogos: []
         };
       }
       
@@ -213,13 +225,14 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     if (!data) {
       console.error('No data returned from scrape-website function');
       
-      // First try third-party logo APIs
+      // First try third-party logo APIs to get multiple logos
       if (domain) {
-        const apiLogo = await tryFetchFromLogoApis(domain);
-        if (apiLogo) {
+        const apiLogos = await tryFetchFromLogoApis(domain);
+        if (apiLogos.length > 0) {
           return {
-            logo: apiLogo,
-            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+            logo: apiLogos[0],
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor,
+            alternativeLogos: apiLogos.slice(1)
           };
         }
       }
@@ -230,7 +243,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
         if (favicon) {
           return {
             logo: favicon,
-            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor
+            brandColor: knownBrandData[domain]?.brandColor || defaultData.brandColor,
+            alternativeLogos: []
           };
         }
       }
@@ -239,7 +253,8 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       if (domain && knownBrandData[domain]) {
         return {
           logo: knownBrandData[domain].logo || defaultData.logo,
-          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor
+          brandColor: knownBrandData[domain].brandColor || defaultData.brandColor,
+          alternativeLogos: []
         };
       }
       
@@ -251,14 +266,22 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
     // Accept the logo URL with less validation to improve success rate
     let logo = data.logo || defaultData.logo;
     
+    // Get any alternative logos returned from the edge function
+    if (data.alternativeLogos && Array.isArray(data.alternativeLogos) && data.alternativeLogos.length > 0) {
+      alternativeLogos.push(...data.alternativeLogos);
+    }
+    
     // If logo is invalid or missing, try third-party logo APIs
     if (!logo || logo === 'undefined' || logo.includes('data:,')) {
       console.log('Invalid logo URL from edge function, trying third-party APIs...');
       if (domain) {
-        const apiLogo = await tryFetchFromLogoApis(domain);
-        if (apiLogo) {
-          logo = apiLogo;
-          console.log('Using logo from API service:', apiLogo);
+        const apiLogos = await tryFetchFromLogoApis(domain);
+        if (apiLogos.length > 0) {
+          logo = apiLogos[0];
+          console.log('Using logo from API service:', apiLogos[0]);
+          
+          // Add the rest of the logos to alternative logos
+          alternativeLogos.push(...apiLogos.slice(1).filter(l => l !== logo));
         }
       }
     }
@@ -299,10 +322,14 @@ export const extractFromWebsite = async (url: string): Promise<CompanyData> => {
       console.log('Using known brand color for domain:', domain, brandColor);
     }
     
+    // Remove duplicates from alternative logos and ensure the main logo is not included
+    const uniqueAlternativeLogos = Array.from(new Set(alternativeLogos)).filter(l => l !== logo);
+    
     // Return with the brand color from the API response, known data, or default black
     return {
       logo,
-      brandColor: brandColor || defaultData.brandColor // Ensure black as fallback
+      brandColor: brandColor || defaultData.brandColor, // Ensure black as fallback
+      alternativeLogos: uniqueAlternativeLogos
     };
   } catch (error) {
     console.error('Error extracting data from website:', error);
